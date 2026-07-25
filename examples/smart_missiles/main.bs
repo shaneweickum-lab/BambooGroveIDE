@@ -1,0 +1,43 @@
+# Coding-Train-style "smart missiles" (spec 3.6): a small fleet of missiles
+# that steer toward a moving target using p5.Vector math (createVector,
+# add/sub/normalize/limit - Phase 2) instead of snapping straight at it -
+# the same "seek" steering behavior from Daniel Shiffman's Nature of Code.
+#
+# Built as a two-file project (spec section 6) - see missile.bs for the
+# steering/drawing helpers this file imports. To try it in the IDE: save
+# this as main.bs, click the "+" chip above the editor to add a project
+# file, name it missile.bs, and paste in missile.bs's contents.
+
+import missile
+
+NUM_MISSILES = 6
+MAX_SPEED = 4
+MAX_FORCE = 0.15
+t = 0
+
+positions = [createVector(40, 460), createVector(120, 460), createVector(200, 460), createVector(280, 460), createVector(360, 460), createVector(440, 460)]
+velocities = [createVector(0, 0), createVector(0, 0), createVector(0, 0), createVector(0, 0), createVector(0, 0), createVector(0, 0)]
+colors = [[255, 90, 90], [255, 150, 60], [255, 210, 60], [120, 220, 120], [90, 170, 255], [180, 120, 255]]
+
+def setup():
+    background(12, 12, 20)
+
+def draw():
+    t = t + 0.02
+    target_x = 240 + cos(t) * 170
+    target_y = 240 + sin(t * 1.3) * 150
+
+    # A translucent background (instead of a fully opaque one) leaves a
+    # fading trail behind every missile and the target.
+    background(12, 12, 20, 40)
+
+    no_stroke()
+    fill(255, 60, 90)
+    circle(target_x, target_y, 14)
+
+    for i in range(NUM_MISSILES):
+        pos = positions[i]
+        vel = velocities[i]
+        rgb = colors[i]
+        missile.steer_toward(pos, vel, target_x, target_y, MAX_SPEED, MAX_FORCE)
+        missile.draw_missile(pos, vel, rgb[0], rgb[1], rgb[2])

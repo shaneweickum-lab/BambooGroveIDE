@@ -122,9 +122,17 @@ npm test
   variable, `mousePressed()`), `terminal_quiz.bs` (Terminal-tab
   print/input), `modules_main.bs` + `modules_panda.bs` (a two-file
   project — see the comment in `modules_main.bs` for how to load both),
-  and `phase2_demo.bs` (a `createVector()` position nudged by `noise()`,
+  `phase2_demo.bs` (a `createVector()` position nudged by `noise()`,
   a `bezier()` curve, and a custom `beginShape()`/`vertex()`/`endShape()`
-  shape).
+  shape), `hsb_rainbow.bs` (`colorMode("hsb")` spinning a rainbow ring),
+  `terminal_calculator.bs` (Terminal-tab `input()` + `float()`/`str()`
+  conversions), and `smart_missiles/` — a two-file project (`main.bs` +
+  `missile.bs`) with a small fleet of missiles homing in on a moving
+  target using p5.Vector-style "seek" steering (Coding Train / Nature
+  of Code style): each frame, `missile.bs`'s `steer_toward()` computes
+  the desired velocity toward the target, limits how sharply it can
+  turn (`Vector.limit()`), and lets `main.bs` draw the result rotated
+  to face its heading.
 
 ## Project layout
 
