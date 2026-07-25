@@ -1,0 +1,9 @@
+def setup():
+    background(20, 20, 20)
+    stroke(34, 139, 34)
+
+def draw():
+    no_loop()
+    for i in range(6):
+        forward(120)
+        turn(60)

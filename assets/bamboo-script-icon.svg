@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="128" height="128" role="img" aria-label="BambooScript file icon">
+  <title>BambooScript</title>
+  <!-- Code brackets: </ > -->
+  <path d="M40,21 L19,50 L40,79" fill="none" stroke="#3F7A2C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M60,21 L81,50 L60,79" fill="none" stroke="#3F7A2C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Bamboo stalk replacing the forward slash, tilted diagonally, three
+       segments with gaps standing in for bamboo nodes -->
+  <g transform="rotate(22 50 50)">
+    <rect x="46.5" y="28" width="7" height="11" rx="3.5" fill="#3F7A2C"/>
+    <rect x="46.5" y="44.5" width="7" height="11" rx="3.5" fill="#3F7A2C"/>
+    <rect x="46.5" y="61" width="7" height="11" rx="3.5" fill="#3F7A2C"/>
+
+    <!-- two small leaves, splayed off the topmost segment -->
+    <path d="M0,0 C4,-4 10,-4 13,-1 C10,1.5 4,1.5 0,0 Z" fill="#3F7A2C" transform="translate(46,27) rotate(-160)"/>
+    <path d="M0,0 C4,-4 10,-4 13,-1 C10,1.5 4,1.5 0,0 Z" fill="#3F7A2C" transform="translate(54,27) rotate(-45)"/>
+  </g>
+</svg>

@@ -1,0 +1,32 @@
+# The "teaching loop" example from docs/SPEC.md section 7: draw a bamboo
+# stalk using loops. A while loop stacks segments (with small gaps standing
+# in for bamboo nodes), then a couple of leaves are drawn at the top.
+
+def setup():
+    background(253, 246, 227)
+    stroke(63, 122, 44)
+
+def draw():
+    no_loop()
+    go_to(240, 460)
+
+    segments = 6
+    i = 0
+    while i < segments:
+        forward(60)
+        pen_up()
+        forward(6)
+        pen_down()
+        i = i + 1
+
+    pen_up()
+    go_to(240, 460 - segments * 66)
+    pen_down()
+    turn(-40)
+    forward(50)
+
+    pen_up()
+    go_to(240, 460 - segments * 66)
+    turn(80)
+    pen_down()
+    forward(50)

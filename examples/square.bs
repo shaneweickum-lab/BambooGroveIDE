@@ -1,0 +1,14 @@
+# A square, drawn with a while loop instead of range() — shows both
+# loop styles produce the same kind of turtle movement.
+
+def setup():
+    background(253, 246, 227)
+    stroke(178, 58, 72)
+
+def draw():
+    no_loop()
+    i = 0
+    while i < 4:
+        forward(150)
+        turn(90)
+        i = i + 1
