@@ -78,6 +78,15 @@ assets/                         File icon (SVG master + PNG exports)
 tests/                          node:test unit tests for lexer/parser/transpiler/runtime/storage
 ```
 
+## Deploying
+
+BambooGrove is a static site with no build step, so it deploys to Vercel
+as-is: `vercel.json` pins `framework: null` and `outputDirectory: "."` so
+Vercel serves the repo root directly instead of guessing. Connect the repo
+in the Vercel dashboard (or run `vercel --prod` from this directory) and
+no further configuration is needed — `serve.js` is only for local dev and
+isn't used in production.
+
 ## Known limitations / open items
 
 These mirror the open questions in `docs/SPEC.md` section 6:
