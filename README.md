@@ -41,11 +41,32 @@ npm test
   be mapped back to BambooScript, not generated JS (spec 4.2).
 - **Canvas runtime** (`src/runtime.js`): the full stdlib from spec
   3.3 — drawing primitives, turtle movement, mouse/keyboard input,
-  `frame_count`/`no_loop()`/`loop()`.
+  `frame_count`/`no_loop()`/`loop()` — plus the Phase 1 p5.js-compatible
+  layer from spec 3.6: shapes (`ellipse`/`arc`/`quad`/`triangle`/`square`
+  + `ellipseMode`/`rectMode`), color (`color`/`red`/`green`/`blue`/
+  `alpha`/`lerpColor`/`colorMode` incl. HSB), transform (`push`/`pop`/
+  `translate`/`rotate`/`scale`), math (`map`/`lerp`/`constrain`/`dist`/
+  `random`/`randomSeed`, seeded and deterministic), typography, and the
+  `mouseX`/`pmouseX`/`keyIsPressed`/`PI`/`TWO_PI`/... globals. Mode
+  setters (`ellipseMode`, `rectMode`, `colorMode`, `textAlign`) take
+  plain lowercase strings (`"center"`, `"hsb"`) rather than named
+  constants, to avoid inventing a large constants surface beyond the
+  handful (`PI`, `TWO_PI`, ...) the spec calls for.
+- **Top-level shared variables**: a `name = value` line outside any
+  `def` (spec 3.6's implicit assumption for p5-style sketches, e.g.
+  `clicked = False` above `setup()`) becomes a real variable shared by
+  every function — `draw()` and `mousePressed()` can both read and
+  mutate it. This deliberately skips Python's `global` keyword
+  requirement, since BambooScript's tagline is "run like JavaScript."
+- **Event-driven lifecycle callbacks**: `mousePressed()`, `mouseReleased()`,
+  `mouseDragged()`, `mouseMoved()`, `mouseClicked()`, `keyPressed()`, and
+  `keyReleased()` are optional `def`s (like `setup`/`draw`) that the
+  sandbox calls when the matching DOM event fires.
 - **Sandbox** (`src/sandbox.js`): compiles and runs a sketch, drives the
-  `setup()`/`draw()` `requestAnimationFrame` loop, and turns parse/runtime
-  errors into plain-English messages with a line number. Includes a
-  per-call iteration guard (see "Known limitations" below).
+  `setup()`/`draw()` `requestAnimationFrame` loop (with `frameRate()`
+  throttling), dispatches the event callbacks above, and turns parse/
+  runtime errors into plain-English messages with a line number.
+  Includes a per-call iteration guard (see "Known limitations" below).
 - **Storage** (`src/storage.js`): client-side-only file management
   (New/Save/Save As/Open/Rename/Delete) backed by `localStorage`, plus
   file download/upload for cross-device use — no backend, per spec 5.2.
@@ -56,8 +77,10 @@ npm test
   fallbacks in `assets/png/`): the `</>`-with-bamboo-stalk mark from
   spec 2.3.
 - **Examples** (`examples/*.bs`): the spec's own hexagon/octagon
-  examples, a `while`-loop square, and `bamboo_stalk.bs` — the "draw a
-  bamboo stalk using loops" lesson from spec section 7.
+  examples, a `while`-loop square, `bamboo_stalk.bs` — the "draw a
+  bamboo stalk using loops" lesson from spec section 7 — and
+  `p5_style_orbit.bs`, demonstrating `push`/`translate`/`rotate`, a
+  top-level shared variable, and `mousePressed()`.
 
 ## Project layout
 
@@ -97,3 +120,14 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   isolation. That's still an open decision, not a final one.
 - No multi-file projects, custom asset uploads, or cloud save/sharing —
   all later-phase per spec 5.3.
+- No module system yet (spec section 6: `import module_name` /
+  `from module_name import fn`). Not started — flagged as a distinct
+  chunk of work from the p5.js compatibility layer.
+- p5.js Phase 1 coverage has known simplifications: `circle(x, y, r)`
+  keeps its original radius-based signature rather than switching to
+  p5's diameter-based one (avoids silently breaking existing scripts);
+  `red()`/`green()`/`blue()`/`alpha()` return the raw channel values
+  `color()` was given, not always-0-255 RGB (p5 converts on read
+  regardless of color mode; this doesn't); `arc()` always renders in
+  p5's default open/pie style rather than supporting all four of p5's
+  arc modes.

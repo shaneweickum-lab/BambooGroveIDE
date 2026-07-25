@@ -1,5 +1,6 @@
 // Orchestrates the pipeline described in spec section 4.1: source -> AST ->
-// JS -> a running sketch. Owns the requestAnimationFrame loop and turns any
+// JS -> a running sketch. Owns the requestAnimationFrame loop, dispatches
+// the optional p5.js-style event callbacks (spec 3.6), and turns any
 // failure (parse, compile, or runtime) into a plain-English message mapped
 // back to a BambooScript source line, per spec section 4.2.
 import { BambooSyntaxError, BambooRuntimeError } from "./errors.js";
@@ -28,11 +29,15 @@ export class Sketch {
     this.runtime = null;
     this.program = null;
     this.rafId = null;
+    this._lastFrameTime = undefined;
+    this._eventHandlers = null;
   }
 
   stop() {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    this._lastFrameTime = undefined;
+    this._unwireEventCallbacks();
     if (this.runtime) this.runtime.dispose();
     this.runtime = null;
     this.program = null;
@@ -78,6 +83,7 @@ export class Sketch {
     const runtime = new BambooRuntime(this.canvas);
     this.runtime = runtime;
     runtime.onLoopResume = () => this._scheduleFrame(onError);
+    runtime.onRedrawRequest = () => this._call(this.program.draw, onError);
 
     let program;
     try {
@@ -88,6 +94,7 @@ export class Sketch {
       return false;
     }
     this.program = program;
+    this._wireEventCallbacks(onError);
 
     if (!this._call(program.setup, onError)) return false;
     if (program.draw) this._scheduleFrame(onError);
@@ -95,7 +102,7 @@ export class Sketch {
   }
 
   _call(fn, onError) {
-    if (!fn) return true;
+    if (!fn || !this.runtime) return true;
     this.runtime.resetGuard();
     try {
       fn();
@@ -109,13 +116,64 @@ export class Sketch {
 
   _scheduleFrame(onError) {
     if (this.rafId !== null || !this.runtime || !this.runtime.looping) return;
-    const step = () => {
+    const step = (now) => {
       this.rafId = null;
       if (!this.runtime || !this.runtime.looping) return;
+      const target = this.runtime.frameRateTarget;
+      if (target) {
+        const minDelta = 1000 / target;
+        if (this._lastFrameTime !== undefined && now - this._lastFrameTime < minDelta) {
+          this.rafId = requestAnimationFrame(step);
+          return;
+        }
+      }
+      this._lastFrameTime = now;
       if (!this._call(this.program.draw, onError)) return;
       this.runtime.frameCount++;
       this._scheduleFrame(onError);
     };
     this.rafId = requestAnimationFrame(step);
+  }
+
+  // Wires the optional p5.js-style event callbacks (spec 3.6, Events) to
+  // the canvas/window, each routed through the guarded _call() so errors
+  // inside them are reported and stop the sketch the same way a bad
+  // draw() would.
+  _wireEventCallbacks(onError) {
+    const call = (fn) => this._call(fn, onError);
+    const handlers = {
+      mousedown: () => call(this.program.mousePressed),
+      mouseup: () => call(this.program.mouseReleased),
+      click: () => call(this.program.mouseClicked),
+      mousemove: () => {
+        if (!this.runtime) return;
+        call(this.runtime._mousePressed ? this.program.mouseDragged : this.program.mouseMoved);
+      },
+      keydown: () => call(this.program.keyPressed),
+      keyup: () => call(this.program.keyReleased),
+    };
+    this.canvas.addEventListener("mousedown", handlers.mousedown);
+    this.canvas.addEventListener("mouseup", handlers.mouseup);
+    this.canvas.addEventListener("click", handlers.click);
+    this.canvas.addEventListener("mousemove", handlers.mousemove);
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", handlers.keydown);
+      window.addEventListener("keyup", handlers.keyup);
+    }
+    this._eventHandlers = handlers;
+  }
+
+  _unwireEventCallbacks() {
+    const handlers = this._eventHandlers;
+    if (!handlers) return;
+    this.canvas.removeEventListener("mousedown", handlers.mousedown);
+    this.canvas.removeEventListener("mouseup", handlers.mouseup);
+    this.canvas.removeEventListener("click", handlers.click);
+    this.canvas.removeEventListener("mousemove", handlers.mousemove);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("keydown", handlers.keydown);
+      window.removeEventListener("keyup", handlers.keyup);
+    }
+    this._eventHandlers = null;
   }
 }

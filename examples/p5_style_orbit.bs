@@ -1,0 +1,22 @@
+# Demonstrates the p5.js-compatible layer (spec 3.6): push/pop + translate/
+# rotate for a rotating orbit, mousePressed() as an event-driven lifecycle
+# callback, and a top-level shared variable so draw() and mousePressed()
+# can see the same state.
+
+clicks = 0
+
+def setup():
+    background(20, 20, 30)
+
+def draw():
+    background(20, 20, 30)
+    push()
+    translate(width / 2, height / 2)
+    rotate(frameCount * 0.02)
+    fill(80 + clicks * 20, 160, 220)
+    noStroke()
+    ellipse(120, 0, 30, 30)
+    pop()
+
+def mousePressed():
+    clicks = clicks + 1

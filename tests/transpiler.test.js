@@ -119,3 +119,64 @@ test("embeds __rt.__line markers for error mapping", () => {
   assert.match(code, /__rt\.__line = 2;/);
   assert.match(code, /__rt\.__line = 3;/);
 });
+
+// --- Top-level shared variables (spec 3.6 enabler) ---
+
+test("top-level assignments become variables shared across every function", () => {
+  const src = [
+    "clicks = 0",
+    "",
+    "def draw():",
+    "    clicks = clicks + 1",
+    "",
+    "def mousePressed():",
+    "    clicks = clicks + 10",
+    "    forward(clicks)",
+    "",
+  ].join("\n");
+  const { program, calls } = run(src);
+  program.draw();
+  program.mousePressed();
+  assert.deepEqual(calls, [["forward", 11]]); // 0 -> +1 (draw) -> +10 (mousePressed)
+});
+
+test("top-level control flow is rejected with a friendly error", () => {
+  assert.throws(() => parse("if True:\n    x = 1\n"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /inside a function/);
+    return true;
+  });
+});
+
+// --- p5.js-compatible layer (spec 3.6) ---
+
+test("returns optional lifecycle callbacks (mousePressed, keyPressed, ...) alongside setup/draw", () => {
+  const src = [
+    "def setup():",
+    "    background(0)",
+    "",
+    "def mousePressed():",
+    "    forward(1)",
+    "",
+  ].join("\n");
+  const { program } = run(src);
+  assert.equal(typeof program.setup, "function");
+  assert.equal(typeof program.mousePressed, "function");
+  assert.equal(program.draw, null);
+  assert.equal(program.keyPressed, null);
+});
+
+test("new p5.js-style builtins map to the matching __rt method", () => {
+  const code = transpile(parse("def draw():\n    ellipse(1, 2, 3, 4)\n    push()\n    translate(5, 6)\n    pop()\n"));
+  assert.match(code, /__rt\.ellipse\(1, 2, 3, 4\)/);
+  assert.match(code, /__rt\.push\(\)/);
+  assert.match(code, /__rt\.translate\(5, 6\)/);
+  assert.match(code, /__rt\.pop\(\)/);
+});
+
+test("PI/TWO_PI and other p5.js globals resolve through __rt", () => {
+  const code = transpile(parse("def draw():\n    rotate(PI)\n    forward(mouseX)\n    turn(width)\n"));
+  assert.match(code, /__rt\.rotate\(__rt\.PI\)/);
+  assert.match(code, /__rt\.forward\(__rt\.mouseX\)/);
+  assert.match(code, /__rt\.turn\(__rt\.width\)/);
+});

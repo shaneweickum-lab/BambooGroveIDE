@@ -63,10 +63,29 @@ const KEYWORDS = new Set([
 ]);
 
 const BUILTINS = new Set([
+  // Original snake_case stdlib (spec 3.3)
   "background", "stroke", "fill", "no_fill", "no_stroke", "line", "rect",
   "circle", "point", "text", "forward", "turn", "right", "left", "pen_up",
   "pen_down", "go_to", "home", "mouse_x", "mouse_y", "is_pressed",
   "key_pressed", "frame_count", "no_loop", "loop", "range",
+  // p5.js-compatible layer (spec 3.6)
+  "arc", "ellipse", "quad", "square", "triangle", "ellipseMode", "rectMode",
+  "strokeWeight", "strokeCap", "strokeJoin", "noSmooth", "smooth",
+  "noFill", "noStroke", "clear", "colorMode", "blendMode",
+  "color", "red", "green", "blue", "alpha", "lerpColor",
+  "push", "pop", "translate", "rotate", "scale", "resetMatrix",
+  "frameRate", "cursor", "noCursor", "frameCount",
+  "mouseX", "mouseY", "pmouseX", "pmouseY", "mouseIsPressed", "keyIsPressed", "key",
+  "width", "height", "windowWidth", "windowHeight",
+  "abs", "ceil", "floor", "round", "constrain", "dist", "lerp", "map",
+  "max", "min", "pow", "sq", "sqrt", "sin", "cos", "tan", "radians",
+  "degrees", "random", "randomSeed",
+  "noLoop", "redraw", "isLooping",
+  "keyPressed", "keyReleased", "mousePressed", "mouseReleased",
+  "mouseDragged", "mouseMoved", "mouseClicked",
+  "createCanvas", "resizeCanvas",
+  "textSize", "textAlign", "textFont",
+  "PI", "TWO_PI", "HALF_PI", "QUARTER_PI", "DEGREES", "RADIANS",
 ]);
 
 const TOKEN_RE = /(#.*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b\d+\.?\d*\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)/g;

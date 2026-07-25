@@ -43,10 +43,28 @@ class Parser {
     const body = [];
     this.skipNewlines();
     while (!this.at("EOF")) {
-      body.push(this.parseFunctionDef());
+      body.push(this.at("def") ? this.parseFunctionDef() : this.parseTopLevelStatement());
       this.skipNewlines();
     }
     return { type: "Program", body };
+  }
+
+  // Top-level statements are variable initializers shared across every
+  // function (setup/draw/event callbacks) — the BambooScript equivalent of
+  // a Python module's global scope, or a p5.js sketch's top-of-file `let`s.
+  // Control flow doesn't make sense outside a function, so only plain
+  // assignments/expressions are allowed here.
+  parseTopLevelStatement() {
+    const tok = this.peek();
+    if (tok.type === "if" || tok.type === "for" || tok.type === "while" || tok.type === "return") {
+      throw new BambooSyntaxError(
+        `'${tok.type}' can only be used inside a function. Move this into setup(), draw(), or another def.`,
+        tok.line
+      );
+    }
+    const stmt = this.parseExprOrAssign();
+    this.expect("NEWLINE", "Expected end of line.");
+    return stmt;
   }
 
   parseFunctionDef() {

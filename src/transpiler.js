@@ -23,11 +23,40 @@ const JS_RESERVED_WORDS = new Set([
 ]);
 
 const GLOBAL_READONLY = {
+  // Original snake_case globals (spec 3.3)
   mouse_x: "mouseX",
   mouse_y: "mouseY",
   frame_count: "frameCount",
   key_pressed: "keyPressed",
+  // p5.js-compatible globals (spec 3.6)
+  mouseX: "mouseX",
+  mouseY: "mouseY",
+  pmouseX: "pmouseX",
+  pmouseY: "pmouseY",
+  mouseIsPressed: "mouseIsPressed",
+  keyIsPressed: "keyIsPressed",
+  key: "keyPressed",
+  frameCount: "frameCount",
+  width: "width",
+  height: "height",
+  windowWidth: "windowWidth",
+  windowHeight: "windowHeight",
+  PI: "PI",
+  TWO_PI: "TWO_PI",
+  HALF_PI: "HALF_PI",
+  QUARTER_PI: "QUARTER_PI",
+  DEGREES: "DEGREES",
+  RADIANS: "RADIANS",
 };
+
+// Optional lifecycle functions the sandbox may call in addition to
+// setup()/draw() (spec 3.6 Events): defined the same way as any other
+// top-level `def`, just recognized by name.
+const LIFECYCLE_NAMES = [
+  "setup", "draw",
+  "keyPressed", "keyReleased",
+  "mousePressed", "mouseReleased", "mouseDragged", "mouseMoved", "mouseClicked",
+];
 
 const BINOP_JS = { "+": "+", "-": "-", "*": "*", "/": "/", "%": "%" };
 const COMPARE_JS = { "==": "===", "!=": "!==", "<": "<", ">": ">", "<=": "<=", ">=": ">=" };
@@ -57,23 +86,49 @@ class Transpiler {
   }
 
   transpileProgram(program) {
-    const lines = [`"use strict";`];
-    for (const fn of program.body) {
-      lines.push(this.genFunctionDef(fn));
+    const functionDefs = program.body.filter((n) => n.type === "FunctionDef");
+    const topLevelStmts = program.body.filter((n) => n.type !== "FunctionDef");
+
+    // Top-level `name = value` assignments become real shared variables —
+    // every function can read and mutate them by closing over the same
+    // `let`, the way plain JS (and p5.js sketches) already work. This is a
+    // deliberate deviation from Python, which would require an explicit
+    // `global` keyword to write to a module-level name from inside a
+    // function; BambooScript's tagline is "run like JavaScript", and
+    // requiring `global` would make the setup()/draw()/event-callback
+    // pattern this enables (e.g. a `clicked` flag set in mousePressed()
+    // and read in draw()) needlessly awkward for a teaching tool.
+    const globalNames = new Set();
+    for (const stmt of topLevelStmts) {
+      if (stmt.type === "Assign" && stmt.target.type === "Name") {
+        assertValidIdentifier(stmt.target.name, stmt.line);
+        globalNames.add(stmt.target.name);
+      }
     }
-    lines.push(
-      "return { setup: typeof setup === 'function' ? setup : null, draw: typeof draw === 'function' ? draw : null };"
-    );
+
+    const lines = [`"use strict";`];
+    if (globalNames.size) lines.push(`let ${[...globalNames].join(", ")};`);
+    for (const fn of functionDefs) {
+      lines.push(this.genFunctionDef(fn, globalNames));
+    }
+    for (const stmt of topLevelStmts) {
+      lines.push(this.genStmt(stmt));
+    }
+    const returnFields = LIFECYCLE_NAMES
+      .map((name) => `${name}: typeof ${name} === 'function' ? ${name} : null`)
+      .join(", ");
+    lines.push(`return { ${returnFields} };`);
     return lines.join("\n");
   }
 
-  genFunctionDef(fn) {
+  genFunctionDef(fn, globalNames) {
     assertValidIdentifier(fn.name, fn.line);
     for (const p of fn.params) assertValidIdentifier(p, fn.line);
 
     const locals = new Set();
     collectAssignedNames(fn.body, locals);
     for (const p of fn.params) locals.delete(p);
+    for (const g of globalNames) locals.delete(g);
     for (const name of locals) assertValidIdentifier(name, fn.line);
 
     const decl = locals.size ? `let ${[...locals].join(", ")};` : "";
@@ -202,6 +257,7 @@ class Transpiler {
 
 // Maps BambooScript stdlib call names to BambooRuntime method names.
 const RUNTIME_BUILTINS = {
+  // Drawing primitives + turtle movement (spec 3.3)
   background: "background",
   stroke: "stroke",
   fill: "fill",
@@ -224,6 +280,76 @@ const RUNTIME_BUILTINS = {
   no_loop: "no_loop",
   loop: "loop",
   range: "range",
+
+  // p5.js-compatible layer (spec 3.6, Phase 1)
+  // Shape > 2D Primitives / Attributes
+  arc: "arc",
+  ellipse: "ellipse",
+  quad: "quad",
+  square: "square",
+  triangle: "triangle",
+  ellipseMode: "ellipseMode",
+  rectMode: "rectMode",
+  strokeWeight: "strokeWeight",
+  strokeCap: "strokeCap",
+  strokeJoin: "strokeJoin",
+  noSmooth: "noSmooth",
+  smooth: "smooth",
+  // Color > Setting / Creating & Reading
+  noFill: "noFill",
+  noStroke: "noStroke",
+  clear: "clear",
+  colorMode: "colorMode",
+  blendMode: "blendMode",
+  color: "color",
+  red: "red",
+  green: "green",
+  blue: "blue",
+  alpha: "alpha",
+  lerpColor: "lerpColor",
+  // Transform
+  push: "push",
+  pop: "pop",
+  translate: "translate",
+  rotate: "rotate",
+  scale: "scale",
+  resetMatrix: "resetMatrix",
+  // Environment
+  frameRate: "frameRate",
+  cursor: "cursor",
+  noCursor: "noCursor",
+  // Math
+  abs: "abs",
+  ceil: "ceil",
+  floor: "floor",
+  round: "round",
+  constrain: "constrain",
+  dist: "dist",
+  lerp: "lerp",
+  map: "map",
+  max: "max",
+  min: "min",
+  pow: "pow",
+  sq: "sq",
+  sqrt: "sqrt",
+  sin: "sin",
+  cos: "cos",
+  tan: "tan",
+  radians: "radians",
+  degrees: "degrees",
+  random: "random",
+  randomSeed: "randomSeed",
+  // Structure
+  noLoop: "noLoop",
+  redraw: "redraw",
+  isLooping: "isLooping",
+  // Rendering
+  createCanvas: "createCanvas",
+  resizeCanvas: "resizeCanvas",
+  // Typography
+  textSize: "textSize",
+  textAlign: "textAlign",
+  textFont: "textFont",
 };
 
 function collectAssignedNames(stmts, into) {
