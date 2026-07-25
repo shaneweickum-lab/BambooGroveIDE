@@ -1,0 +1,15 @@
+# The sibling module imported by modules_main.bs (spec section 6). Save
+# this as panda.bs alongside a main.bs that does `import panda`.
+
+def draw_panda(x, y):
+    fill(40, 40, 40)
+    circle(x, y, 60)
+    circle(x - 25, y - 30, 18)
+    circle(x + 25, y - 30, 18)
+
+def panda_walk():
+    for i in range(4):
+        forward(20)
+        turn(15)
+        turn(-30)
+        turn(15)

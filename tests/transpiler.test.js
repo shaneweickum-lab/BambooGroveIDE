@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "../src/parser.js";
-import { transpile } from "../src/transpiler.js";
+import { transpile, transpileLibrary } from "../src/transpiler.js";
 import { BambooSyntaxError } from "../src/errors.js";
 
 function makeFakeRuntime() {
@@ -140,8 +140,13 @@ test("top-level assignments become variables shared across every function", () =
   assert.deepEqual(calls, [["forward", 11]]); // 0 -> +1 (draw) -> +10 (mousePressed)
 });
 
-test("top-level control flow is rejected with a friendly error", () => {
-  assert.throws(() => parse("if True:\n    x = 1\n"), (err) => {
+test("top-level control flow is allowed (needed for Terminal/script mode)", () => {
+  const ast = parse("if True:\n    x = 1\n");
+  assert.equal(ast.body[0].type, "If");
+});
+
+test("bare 'return' at the top level is still rejected with a friendly error", () => {
+  assert.throws(() => parse("return 1\n"), (err) => {
     assert.ok(err instanceof BambooSyntaxError);
     assert.match(err.message, /inside a function/);
     return true;
@@ -179,4 +184,86 @@ test("PI/TWO_PI and other p5.js globals resolve through __rt", () => {
   assert.match(code, /__rt\.rotate\(__rt\.PI\)/);
   assert.match(code, /__rt\.forward\(__rt\.mouseX\)/);
   assert.match(code, /__rt\.turn\(__rt\.width\)/);
+});
+
+// --- Terminal mode (spec 3.6): async codegen ---
+
+function makeTerminalRuntime() {
+  const calls = [];
+  const rt = {
+    __line: 0,
+    __truthy: (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)),
+    __tick() {},
+    __iter: (v) => v,
+    __andAsync: async (l, r) => { const v = await l(); return rt.__truthy(v) ? await r() : v; },
+    __orAsync: async (l, r) => { const v = await l(); return rt.__truthy(v) ? v : await r(); },
+    range(a, b, c) {
+      let s, e, st;
+      if (b === undefined) { s = 0; e = a; st = 1; } else if (c === undefined) { s = a; e = b; st = 1; } else { s = a; e = b; st = c; }
+      const out = [];
+      for (let v = s; st > 0 ? v < e : v > e; v += st) out.push(v);
+      return out;
+    },
+    print: (...a) => calls.push(["print", ...a]),
+    input: async (p) => `answered:${p}`,
+  };
+  return { rt, calls };
+}
+
+test("terminal mode emits async functions and awaits every call", () => {
+  const code = transpile(parse("def draw():\n    forward(1)\n"), { mode: "terminal" });
+  assert.match(code, /async function draw\(\)/);
+  assert.match(code, /\(await __rt\.forward\(1\)\)/);
+});
+
+test("terminal mode: top-level script runs via __ready, print/input work", async () => {
+  const src = "name = input('Name? ')\nprint('Hi ' + name)\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", "Hi answered:Name? "]]);
+});
+
+test("terminal mode: top-level for-loop declares its loop variable correctly", async () => {
+  const src = "for i in range(3):\n    print(i)\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", 0], ["print", 1], ["print", 2]]);
+});
+
+test("terminal mode: 'and'/'or' with an awaited operand still short-circuits correctly", async () => {
+  const src = "if 'Ada' == 'Ada' and input('really?') == 'yes':\n    print('special')\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  rt.input = async () => "yes";
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", "special"]]);
+});
+
+test("canvas mode (default) is unaffected: no async/await anywhere in the output", () => {
+  const code = transpile(parse("def draw():\n    forward(1)\n    if True and False:\n        turn(1)\n"));
+  assert.doesNotMatch(code, /async/);
+  assert.doesNotMatch(code, /await/);
+});
+
+// --- Library modules (spec section 6) ---
+
+test("transpileLibrary wraps every top-level function into an IIFE namespace object", () => {
+  const code = transpileLibrary(parse("def draw_panda(x, y):\n    circle(x, y, 20)\n\ndef helper():\n    return 1\n"));
+  assert.match(code, /^\(\(\) => \{/);
+  assert.match(code, /return \{ draw_panda: .*, helper: .* \};/);
+  const rt = { circle: () => {} };
+  const ns = new Function("__rt", `return ${code};`)(rt);
+  assert.equal(typeof ns.draw_panda, "function");
+  assert.equal(typeof ns.helper, "function");
+});
+
+test("transpileLibrary does not restrict exports to the lifecycle name list", () => {
+  const code = transpileLibrary(parse("def totally_custom_name():\n    return 1\n"));
+  const ns = new Function("__rt", `return ${code};`)({});
+  assert.equal(ns.totally_custom_name(), 1);
 });

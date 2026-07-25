@@ -11,11 +11,7 @@
 // textAlign) take lowercase strings ("center", "corner", "hsb", ...)
 // instead of named constants, to avoid inventing a large constants surface
 // beyond the handful (PI, TWO_PI, ...) the spec actually calls for.
-import { BambooRuntimeError } from "./errors.js";
-
-const MAX_ITERATIONS_PER_CALL = 300000;
-const MAX_MS_PER_CALL = 3000;
-const MAX_RANGE_LENGTH = 1000000;
+import { RuntimeBase } from "./runtime-base.js";
 
 const CURSOR_ALIASES = {
   ARROW: "default", CROSS: "crosshair", HAND: "pointer",
@@ -55,8 +51,9 @@ function hsbToRgb(h, s, v) {
   }
 }
 
-export class BambooRuntime {
+export class BambooRuntime extends RuntimeBase {
   constructor(canvas) {
+    super();
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.width = canvas.width;
@@ -101,10 +98,6 @@ export class BambooRuntime {
 
     this._prngState = null; // null = unseeded (use Math.random())
 
-    this.__line = 0;
-    this.__iterCount = 0;
-    this.__guardStart = 0;
-
     this._onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
       this.pmouseX = this.mouseX;
@@ -136,11 +129,6 @@ export class BambooRuntime {
     }
   }
 
-  resetGuard() {
-    this.__iterCount = 0;
-    this.__guardStart = performance.now();
-  }
-
   // --- Environment (spec 3.6) ---
 
   get windowWidth() { return typeof window !== "undefined" ? window.innerWidth : this.width; }
@@ -156,99 +144,6 @@ export class BambooRuntime {
   get QUARTER_PI() { return Math.PI / 4; }
   get DEGREES() { return "degrees"; }
   get RADIANS() { return "radians"; }
-
-  // --- Internal helpers used by generated code (see transpiler.js) ---
-
-  __truthy(v) {
-    if (Array.isArray(v)) return v.length > 0;
-    return Boolean(v) && !(typeof v === "number" && Number.isNaN(v));
-  }
-
-  __not(v) {
-    return !this.__truthy(v);
-  }
-
-  __and(left, right) {
-    const v = left();
-    return this.__truthy(v) ? right() : v;
-  }
-
-  __or(left, right) {
-    const v = left();
-    return this.__truthy(v) ? v : right();
-  }
-
-  __tick(line) {
-    this.__iterCount++;
-    if (this.__iterCount > MAX_ITERATIONS_PER_CALL) {
-      throw new BambooRuntimeError(
-        "This loop ran too many times without finishing. Check for an infinite loop.",
-        line
-      );
-    }
-    if (this.__iterCount % 5000 === 0 && performance.now() - this.__guardStart > MAX_MS_PER_CALL) {
-      throw new BambooRuntimeError(
-        "This took too long to run. Check for an infinite loop.",
-        line
-      );
-    }
-  }
-
-  __iter(value, line) {
-    if (Array.isArray(value)) return value;
-    if (typeof value === "string") return Array.from(value);
-    throw new BambooRuntimeError(
-      `Expected a list or range(...) after 'in', but got ${describeType(value)}.`,
-      line
-    );
-  }
-
-  __index(obj, idx, line) {
-    if (!Array.isArray(obj) && typeof obj !== "string") {
-      throw new BambooRuntimeError(`Can't index into ${describeType(obj)} — expected a list.`, line);
-    }
-    if (typeof idx !== "number" || !Number.isInteger(idx)) {
-      throw new BambooRuntimeError("A list index must be a whole number.", line);
-    }
-    const i = idx < 0 ? obj.length + idx : idx;
-    if (i < 0 || i >= obj.length) {
-      throw new BambooRuntimeError(`List index ${idx} is out of range (list has ${obj.length} item(s)).`, line);
-    }
-    return obj[i];
-  }
-
-  __setIndex(obj, idx, value, line) {
-    if (!Array.isArray(obj)) {
-      throw new BambooRuntimeError(`Can't assign into ${describeType(obj)} — expected a list.`, line);
-    }
-    if (typeof idx !== "number" || !Number.isInteger(idx)) {
-      throw new BambooRuntimeError("A list index must be a whole number.", line);
-    }
-    const i = idx < 0 ? obj.length + idx : idx;
-    if (i < 0 || i >= obj.length) {
-      throw new BambooRuntimeError(`List index ${idx} is out of range (list has ${obj.length} item(s)).`, line);
-    }
-    obj[i] = value;
-    return value;
-  }
-
-  range(a, b, c) {
-    let start, stop, step;
-    if (b === undefined) { start = 0; stop = a; step = 1; }
-    else if (c === undefined) { start = a; stop = b; step = 1; }
-    else { start = a; stop = b; step = c; }
-
-    if (step === 0) {
-      throw new BambooRuntimeError("range() step can't be 0.", this.__line);
-    }
-    const length = Math.max(0, Math.ceil((stop - start) / step));
-    if (length > MAX_RANGE_LENGTH) {
-      throw new BambooRuntimeError(`range(...) would produce ${length} items, which is too many.`, this.__line);
-    }
-    const out = new Array(length);
-    for (let i = 0, v = start; i < length; i++, v += step) out[i] = v;
-    return out;
-  }
 
   // --- Color (spec 3.3 + 3.6) ---
 
@@ -651,13 +546,4 @@ export class BambooRuntime {
     if (b === undefined) return this._nextRandom() * a;
     return a + this._nextRandom() * (b - a);
   }
-}
-
-function describeType(v) {
-  if (v === null || v === undefined) return "nothing";
-  if (Array.isArray(v)) return "a list";
-  if (typeof v === "number") return "a number";
-  if (typeof v === "string") return "a string";
-  if (typeof v === "boolean") return "a boolean";
-  return typeof v;
 }

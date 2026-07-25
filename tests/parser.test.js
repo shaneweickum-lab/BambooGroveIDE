@@ -66,3 +66,58 @@ test("throws a friendly error for a missing colon", () => {
 test("throws when assigning to something that isn't a name or index", () => {
   assert.throws(() => parse("def f():\n    1 + 1 = 2\n"), BambooSyntaxError);
 });
+
+// --- Modules (spec section 6) ---
+
+test("parses 'import name'", () => {
+  const ast = parse("import panda\n");
+  assert.equal(ast.body[0].type, "Import");
+  assert.equal(ast.body[0].module, "panda");
+});
+
+test("parses 'from name import a, b as c'", () => {
+  const ast = parse("from panda import draw_panda, panda_walk as walk\n");
+  const node = ast.body[0];
+  assert.equal(node.type, "FromImport");
+  assert.equal(node.module, "panda");
+  assert.deepEqual(node.names, [
+    { name: "draw_panda", alias: null },
+    { name: "panda_walk", alias: "walk" },
+  ]);
+});
+
+test("parses module_name.function_name() as a Call with a module field", () => {
+  const ast = parse("import panda\n\ndef draw():\n    panda.draw_panda(1, 2)\n");
+  const call = ast.body[1].body[0].value;
+  assert.equal(call.type, "Call");
+  assert.equal(call.module, "panda");
+  assert.equal(call.callee, "draw_panda");
+  assert.equal(call.args.length, 2);
+});
+
+test("rejects import/from inside a function body", () => {
+  assert.throws(() => parse("def f():\n    import panda\n"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /top of the file/);
+    return true;
+  });
+});
+
+test("rejects '.' after anything other than a plain name", () => {
+  assert.throws(() => parse("import panda\n\ndef draw():\n    panda.draw_panda(1, 2).oops\n"), BambooSyntaxError);
+});
+
+// --- Terminal/script mode enabler: top-level control flow ---
+
+test("allows if/for/while at the top level (needed for Terminal mode scripts)", () => {
+  const ast = parse("for i in range(3):\n    print(i)\n");
+  assert.equal(ast.body[0].type, "For");
+});
+
+test("still rejects bare 'return' at the top level", () => {
+  assert.throws(() => parse("return 1\n"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /inside a function/);
+    return true;
+  });
+});

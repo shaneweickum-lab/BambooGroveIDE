@@ -62,25 +62,50 @@ npm test
   `mouseDragged()`, `mouseMoved()`, `mouseClicked()`, `keyPressed()`, and
   `keyReleased()` are optional `def`s (like `setup`/`draw`) that the
   sandbox calls when the matching DOM event fires.
-- **Sandbox** (`src/sandbox.js`): compiles and runs a sketch, drives the
-  `setup()`/`draw()` `requestAnimationFrame` loop (with `frameRate()`
-  throttling), dispatches the event callbacks above, and turns parse/
-  runtime errors into plain-English messages with a line number.
-  Includes a per-call iteration guard (see "Known limitations" below).
+- **Terminal tab** (spec 3.6): a second execution mode for plain
+  top-to-bottom scripts — no `setup()`/`draw()`, just `print()` and a
+  genuinely-pausing `input()` (typing a line and hitting Enter resumes
+  the script exactly where it left off). Canvas-only builtins are
+  disabled there with a friendly redirect instead of a crash. Under the
+  hood, Terminal mode compiles to `async` functions with every call
+  awaited, so `input()` can really suspend execution — Canvas mode is
+  untouched by this and stays fully synchronous.
+- **Module system** (`src/modules.js`, spec section 6): `import name` and
+  `from name import fn [as alias]` pull in a sibling `.bs` file within
+  the same project. The resolver walks the import graph, detects
+  circular imports (naming the full cycle) and missing files, and
+  assembles everything into one script — each imported file becomes a
+  namespaced object (`panda.draw_panda()`), in dependency order.
+- **Reference tab**: a static quick-reference panel covering syntax, the
+  full stdlib, and both execution modes — no need to leave the IDE to
+  look something up.
+- **Sandbox** (`src/sandbox.js`): compiles and runs a sketch in either
+  mode, drives the `setup()`/`draw()` `requestAnimationFrame` loop (with
+  `frameRate()` throttling) in Canvas mode, dispatches the event
+  callbacks above, and turns parse/runtime errors into plain-English
+  messages with a line number. Includes a per-call iteration guard (see
+  "Known limitations" below).
 - **Storage** (`src/storage.js`): client-side-only file management
   (New/Save/Save As/Open/Rename/Delete) backed by `localStorage`, plus
   file download/upload for cross-device use — no backend, per spec 5.2.
-- **Editor shell** (`index.html`, `styles.css`, `src/app.js`): code pane
-  with line numbers and syntax highlighting, canvas pane, Run/Stop, and
-  the sketch list sidebar.
+  A "project" is a flat group of files sharing a `projectId` (the entry
+  file's own id doubles as the project's id), backing the module system
+  above.
+- **Editor shell** (`index.html`, `styles.css`, `src/app.js`): one shared
+  code pane (line numbers + syntax highlighting) feeding a tabbed output
+  pane — Canvas / Terminal / Reference — plus Run/Stop, the sketch list
+  sidebar, and a project-files chip row for switching between a
+  project's main file and its sibling modules (with a "+" to add one).
 - **File icon** (`assets/bamboo-script-icon.svg`, plus 16/32/64/128 PNG
   fallbacks in `assets/png/`): the `</>`-with-bamboo-stalk mark from
   spec 2.3.
 - **Examples** (`examples/*.bs`): the spec's own hexagon/octagon
   examples, a `while`-loop square, `bamboo_stalk.bs` — the "draw a
-  bamboo stalk using loops" lesson from spec section 7 — and
-  `p5_style_orbit.bs`, demonstrating `push`/`translate`/`rotate`, a
-  top-level shared variable, and `mousePressed()`.
+  bamboo stalk using loops" lesson from spec section 7 — 
+  `p5_style_orbit.bs` (`push`/`translate`/`rotate`, a top-level shared
+  variable, `mousePressed()`), `terminal_quiz.bs` (Terminal-tab
+  print/input), and `modules_main.bs` + `modules_panda.bs` (a two-file
+  project — see the comment in `modules_main.bs` for how to load both).
 
 ## Project layout
 
@@ -88,17 +113,20 @@ npm test
 index.html, styles.css      Editor shell
 src/lexer.js                 Tokenizer
 src/parser.js                Recursive-descent parser -> AST
-src/transpiler.js             AST -> JS codegen
-src/runtime.js                Canvas + turtle + input/timing stdlib
-src/sandbox.js                Compile/run pipeline, error mapping, rAF loop
-src/storage.js                localStorage-backed file management
-src/app.js                    Wires the editor shell UI together
+src/transpiler.js             AST -> JS codegen (Canvas + Terminal modes, library modules)
+src/runtime-base.js           Guard/truthiness/list logic shared by both runtimes
+src/runtime.js                Canvas + turtle + input/timing stdlib (BambooRuntime)
+src/terminal-runtime.js       Terminal tab's runtime: print()/input(), canvas-builtin stubs
+src/modules.js                Import graph resolution + multi-file assembly (spec section 6)
+src/sandbox.js                Compile/run pipeline for both modes, error mapping, rAF loop
+src/storage.js                localStorage-backed file + project management
+src/app.js                    Wires the editor shell UI together (tabs, terminal, project chips)
 src/errors.js                 Shared BambooSyntaxError / BambooRuntimeError
 serve.js                       Zero-dependency static file server
 docs/SPEC.md                   Full technical spec
 examples/*.bs                  Example sketches
 assets/                         File icon (SVG master + PNG exports)
-tests/                          node:test unit tests for lexer/parser/transpiler/runtime/storage
+tests/                          node:test unit tests for every src/ module
 ```
 
 ## Deploying
@@ -118,11 +146,13 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   `window`/`document` access from user code) plus an iteration-count and
   wall-clock guard per `setup()`/`draw()` call — not full iframe/Worker
   isolation. That's still an open decision, not a final one.
-- No multi-file projects, custom asset uploads, or cloud save/sharing —
-  all later-phase per spec 5.3.
-- No module system yet (spec section 6: `import module_name` /
-  `from module_name import fn`). Not started — flagged as a distinct
-  chunk of work from the p5.js compatibility layer.
+- No custom asset uploads or cloud save/sharing — later-phase per spec 5.3.
+- Module system scope: v0.1 flat-folder only (spec 6.6) — no subfolders,
+  no dotted import paths. Library modules (imported sibling files) always
+  compile in Canvas (sync) mode regardless of the importing file's mode,
+  since they're meant to be reusable helper functions (the spec's own
+  `draw_panda()`/`panda_walk()` example) — a sibling file can't itself
+  call `input()`.
 - p5.js Phase 1 coverage has known simplifications: `circle(x, y, r)`
   keeps its original radius-based signature rather than switching to
   p5's diameter-based one (avoids silently breaking existing scripts);
@@ -131,3 +161,8 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   regardless of color mode; this doesn't); `arc()` always renders in
   p5's default open/pie style rather than supporting all four of p5's
   arc modes.
+- Mode-setter functions (`ellipseMode`, `rectMode`, `colorMode`,
+  `textAlign`) take plain lowercase strings (`"center"`, `"hsb"`) instead
+  of named constants like `p5.CENTER`, to avoid inventing a large
+  constants surface beyond the handful (`PI`, `TWO_PI`, ...) the spec
+  calls for.

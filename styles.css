@@ -159,12 +159,47 @@ html, body {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   background: var(--charcoal);
   color: var(--text-on-charcoal);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 14px;
   line-height: 1.5;
 }
+
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* --- Project files (spec section 6: main.bs + sibling modules) --- */
+
+.project-files {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--charcoal-light);
+  border-bottom: 1px solid var(--charcoal-lighter);
+  font-size: 0.82rem;
+  overflow-x: auto;
+}
+
+.project-files .chip {
+  background: var(--charcoal);
+  color: var(--text-on-charcoal);
+  border: 1px solid var(--charcoal-lighter);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.project-files .chip:hover { background: var(--charcoal-lighter); }
+.project-files .chip.active { background: var(--forest-green); border-color: var(--forest-green); color: #fff; }
+.project-files .chip-add { font-weight: 700; }
 
 .editor-gutter {
   flex: none;
@@ -219,19 +254,57 @@ html, body {
 .tok-number { color: var(--hl-number); }
 .tok-comment { color: var(--hl-comment); font-style: italic; }
 
-/* --- Canvas pane --- */
+/* --- Output pane: tabs + Canvas / Terminal / Reference panels --- */
 
-.canvas-pane {
+.output-pane {
   flex: none;
   width: 520px;
   display: flex;
   flex-direction: column;
+  background: var(--cream);
+  overflow: hidden;
+}
+
+.output-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  background: var(--cream-dark);
+  border-bottom: 1px solid #ddceac;
+}
+
+.output-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 7px 16px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: #6b6350;
+}
+
+.output-tab:hover { background: #e4d6b3; }
+.output-tab.active {
+  background: var(--cream);
+  border-color: #ddceac;
+  color: #2a2a2a;
+  font-weight: 600;
+}
+
+.tab-panel {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
   padding: 16px;
-  background: var(--cream);
   overflow: auto;
 }
+
+.tab-panel.active { display: flex; }
 
 #canvas {
   background: #ffffff;
@@ -253,11 +326,94 @@ html, body {
   white-space: pre-wrap;
 }
 
+/* --- Terminal tab (spec 3.6) --- */
+
+#tab-terminal { align-items: stretch; padding: 0; }
+
+.terminal-output {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--charcoal);
+  color: #d7f5d0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  padding: 12px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.terminal-output .line-error { color: #ff9d8a; }
+.terminal-output .line-system { color: var(--text-muted); font-style: italic; }
+
+.terminal-input-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--charcoal-light);
+  border-top: 1px solid var(--charcoal-lighter);
+}
+
+.terminal-input-row[hidden] { display: none; }
+
+.terminal-prompt {
+  color: #d7f5d0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  white-space: pre;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #d7f5d0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  caret-color: #d7f5d0;
+}
+
+/* --- Reference tab --- */
+
+#tab-reference { align-items: stretch; }
+
+.reference section { margin-bottom: 18px; }
+
+.reference h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--forest-green);
+  margin: 0 0 8px;
+  border-bottom: 1px solid #ddceac;
+  padding-bottom: 4px;
+}
+
+.reference dl { margin: 0; }
+.reference dt { margin-top: 8px; }
+.reference dt code {
+  background: var(--cream-dark);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.85rem;
+}
+.reference dd { margin: 2px 0 0; color: #55503f; font-size: 0.88rem; }
+.reference-note { font-size: 0.82rem; color: #7a7360; font-style: italic; margin-top: 8px; }
+
 @media (prefers-color-scheme: dark) {
   html, body { background: #16150f; }
-  .canvas-pane { background: #16150f; }
+  .output-pane { background: #16150f; }
+  .output-tabs { background: #1c1a14; border-bottom-color: #34301f; }
+  .output-tab.active { background: #16150f; border-color: #34301f; color: var(--text-on-charcoal); }
+  .output-tab:hover { background: #2c2818; }
   .sidebar { background: #1c1a14; border-right-color: #34301f; color: var(--text-on-charcoal); }
   .sidebar h2 { color: var(--text-muted); }
   .file-list li:hover { background: #2c2818; }
   .status-bar { background: #1c1a14; color: var(--text-muted); }
+  .reference dt code { background: #2c2818; }
+  .reference dd { color: var(--text-muted); }
 }

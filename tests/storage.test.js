@@ -13,7 +13,7 @@ class MemoryStorage {
 
 globalThis.localStorage = new MemoryStorage();
 
-const { storage, sanitizeName } = await import("../src/storage.js");
+const { storage, sanitizeName, moduleNameOf, makeModuleSourceLookup } = await import("../src/storage.js");
 
 beforeEach(() => {
   globalThis.localStorage.clear();
@@ -62,4 +62,46 @@ test("deleteFile removes both the index entry and the content", () => {
   storage.deleteFile(entry.id);
   assert.equal(storage.listFiles().length, 0);
   assert.equal(storage.getFile(entry.id), "");
+});
+
+// --- Projects (spec section 6) ---
+
+test("createFile makes a self-referential project (its own id is its projectId)", () => {
+  const entry = storage.createFile("main.bs", "x");
+  assert.equal(entry.projectId, entry.id);
+});
+
+test("createProjectFile shares the given projectId", () => {
+  const main = storage.createFile("main.bs", "import panda\n");
+  const panda = storage.createProjectFile(main.projectId, "panda.bs", "def draw_panda():\n    return 0\n");
+  assert.equal(panda.projectId, main.projectId);
+  assert.notEqual(panda.id, main.id);
+});
+
+test("listProjectFiles returns the entry file first, then siblings alphabetically", () => {
+  const main = storage.createFile("main.bs", "x");
+  storage.createProjectFile(main.projectId, "zebra.bs", "");
+  storage.createProjectFile(main.projectId, "apple.bs", "");
+  const files = storage.listProjectFiles(main.projectId);
+  assert.deepEqual(files.map((f) => f.name), ["main.bs", "apple.bs", "zebra.bs"]);
+});
+
+test("listProjectFiles doesn't include files from other projects", () => {
+  const main = storage.createFile("main.bs", "x");
+  storage.createFile("other.bs", "y"); // unrelated, separate project
+  const files = storage.listProjectFiles(main.projectId);
+  assert.equal(files.length, 1);
+});
+
+test("moduleNameOf strips the .bs extension", () => {
+  const entry = storage.createFile("panda.bs", "");
+  assert.equal(moduleNameOf(entry), "panda");
+});
+
+test("makeModuleSourceLookup resolves siblings by module name, and misses return null", () => {
+  const main = storage.createFile("main.bs", "import panda\n");
+  storage.createProjectFile(main.projectId, "panda.bs", "def draw_panda():\n    return 0\n");
+  const lookup = makeModuleSourceLookup(main.projectId);
+  assert.equal(lookup("panda"), "def draw_panda():\n    return 0\n");
+  assert.equal(lookup("nope"), null);
 });

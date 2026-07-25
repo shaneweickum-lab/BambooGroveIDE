@@ -7,6 +7,7 @@ import { BambooSyntaxError } from "./errors.js";
 const KEYWORDS = new Set([
   "def", "return", "if", "elif", "else", "for", "in", "while",
   "and", "or", "not", "True", "False",
+  "import", "from", "as",
 ]);
 
 const SINGLE_CHAR_OPS = {

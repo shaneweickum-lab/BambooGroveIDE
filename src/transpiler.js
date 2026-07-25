@@ -1,7 +1,16 @@
 // Transpiles a BambooScript AST (see parser.js) into a JS source string.
-// The generated source, run through `new Function('__rt', src)`, returns
-// `{ setup, draw }` — plain JS functions that call back into the runtime
-// object (`__rt`, see runtime.js) for every visible effect.
+//
+// Two independent axes control the shape of the output:
+//  - `mode`: "canvas" (default) emits plain sync functions, for the
+//    setup()/draw() animation-loop world. "terminal" (spec 3.6 Terminal
+//    tab) emits every function as `async` and awaits every call, so
+//    `input()` can genuinely pause execution until the user types a line
+//    — see runtime-base.js / terminal-runtime.js.
+//  - `exportMode`: "lifecycle" (default, for the entry file) returns the
+//    fixed set of lifecycle functions (setup, draw, mousePressed, ...).
+//    "all" (for a sibling module file, spec section 6) returns every
+//    top-level function by name, for `import`/`from ... import` to pull
+//    from.
 //
 // Design notes:
 //  - Every builtin (background, forward, mouse_x, ...) is only ever reached
@@ -10,7 +19,13 @@
 //  - `__rt.__line` is updated before most statements so a thrown error can
 //    be mapped back to the original BambooScript source line.
 //  - `__rt.__tick(line)` is called on every loop iteration as an infinite
-//    loop guard (see runtime.js for the actual limits).
+//    loop guard (see runtime-base.js for the actual limits).
+//  - Library modules (imported sibling files) always compile in "canvas"
+//    (sync) mode regardless of the importing file's mode: they're meant
+//    to be reusable helper functions (spec 6's own example is
+//    draw_panda()/panda_walk()), not input()-driven scripts. Calling a
+//    sync helper's result with `await` (as terminal mode does at every
+//    call site) is harmless — awaiting a non-promise just resolves to it.
 import { BambooSyntaxError } from "./errors.js";
 
 const JS_RESERVED_WORDS = new Set([
@@ -77,17 +92,21 @@ function assertValidIdentifier(name, line) {
 }
 
 class Transpiler {
-  constructor() {
+  constructor(mode) {
     this.tempCounter = 0;
+    this.mode = mode;
   }
 
   nextTemp() {
     return `__t${this.tempCounter++}`;
   }
 
-  transpileProgram(program) {
+  transpileProgram(program, exportMode) {
     const functionDefs = program.body.filter((n) => n.type === "FunctionDef");
-    const topLevelStmts = program.body.filter((n) => n.type !== "FunctionDef");
+    const importStmts = program.body.filter((n) => n.type === "Import" || n.type === "FromImport");
+    const topLevelStmts = program.body.filter(
+      (n) => n.type !== "FunctionDef" && n.type !== "Import" && n.type !== "FromImport"
+    );
 
     // Top-level `name = value` assignments become real shared variables —
     // every function can read and mutate them by closing over the same
@@ -98,42 +117,83 @@ class Transpiler {
     // requiring `global` would make the setup()/draw()/event-callback
     // pattern this enables (e.g. a `clicked` flag set in mousePressed()
     // and read in draw()) needlessly awkward for a teaching tool.
-    const globalNames = new Set();
-    for (const stmt of topLevelStmts) {
-      if (stmt.type === "Assign" && stmt.target.type === "Name") {
-        assertValidIdentifier(stmt.target.name, stmt.line);
-        globalNames.add(stmt.target.name);
+    const declareNames = new Set(); // names THIS unit declares with `let`
+    const shadowExcludeNames = new Set(); // names a function must not locally re-declare
+    // Terminal mode allows full control flow at the top level (it's a plain
+    // script, not just global-variable initializers), so this has to walk
+    // into for/while/if bodies too — not just scan direct top-level Assigns
+    // — to catch things like a top-level `for i in range(3):`'s loop variable.
+    collectAssignedNames(topLevelStmts, declareNames);
+    const firstLine = topLevelStmts[0]?.line ?? 0;
+    for (const name of declareNames) {
+      assertValidIdentifier(name, firstLine);
+      shadowExcludeNames.add(name);
+    }
+
+    // Imports (spec section 6): `import foo` expects a `const foo = ...`
+    // already in the enclosing scope (emitted by the module orchestrator,
+    // see modules.js) — this unit just has to avoid shadowing it. `from
+    // foo import bar [as baz]` binds a new shared name the same way a
+    // global does.
+    const importLines = [];
+    for (const stmt of importStmts) {
+      if (stmt.type === "Import") {
+        assertValidIdentifier(stmt.module, stmt.line);
+        shadowExcludeNames.add(stmt.module);
+      } else {
+        assertValidIdentifier(stmt.module, stmt.line);
+        for (const { name, alias } of stmt.names) {
+          const bound = alias || name;
+          assertValidIdentifier(bound, stmt.line);
+          declareNames.add(bound);
+          shadowExcludeNames.add(bound);
+          importLines.push(`${bound} = ${stmt.module}.${name};`);
+        }
       }
     }
 
     const lines = [`"use strict";`];
-    if (globalNames.size) lines.push(`let ${[...globalNames].join(", ")};`);
+    if (declareNames.size) lines.push(`let ${[...declareNames].join(", ")};`);
+    for (const line of importLines) lines.push(line);
     for (const fn of functionDefs) {
-      lines.push(this.genFunctionDef(fn, globalNames));
+      lines.push(this.genFunctionDef(fn, shadowExcludeNames));
     }
-    for (const stmt of topLevelStmts) {
-      lines.push(this.genStmt(stmt));
+
+    if (this.mode === "terminal") {
+      const topBody = topLevelStmts.map((stmt) => this.genStmt(stmt)).join("\n");
+      lines.push(`async function __run() {\n${topBody}\n}`);
+      lines.push(`const __ready = __run();`);
+      lines.push(this.buildReturnStatement(functionDefs, exportMode, ["__ready"]));
+    } else {
+      for (const stmt of topLevelStmts) lines.push(this.genStmt(stmt));
+      lines.push(this.buildReturnStatement(functionDefs, exportMode, []));
     }
-    const returnFields = LIFECYCLE_NAMES
-      .map((name) => `${name}: typeof ${name} === 'function' ? ${name} : null`)
-      .join(", ");
-    lines.push(`return { ${returnFields} };`);
     return lines.join("\n");
   }
 
-  genFunctionDef(fn, globalNames) {
+  buildReturnStatement(functionDefs, exportMode, extraNames) {
+    const names = exportMode === "all" ? functionDefs.map((fn) => fn.name) : LIFECYCLE_NAMES;
+    const fields = names
+      .map((name) => `${name}: typeof ${name} === 'function' ? ${name} : null`)
+      .concat(extraNames)
+      .join(", ");
+    return `return { ${fields} };`;
+  }
+
+  genFunctionDef(fn, boundTopNames) {
     assertValidIdentifier(fn.name, fn.line);
     for (const p of fn.params) assertValidIdentifier(p, fn.line);
 
     const locals = new Set();
     collectAssignedNames(fn.body, locals);
     for (const p of fn.params) locals.delete(p);
-    for (const g of globalNames) locals.delete(g);
+    for (const g of boundTopNames) locals.delete(g);
     for (const name of locals) assertValidIdentifier(name, fn.line);
 
     const decl = locals.size ? `let ${[...locals].join(", ")};` : "";
     const body = fn.body.map((stmt) => this.genStmt(stmt)).join("\n");
-    return `function ${fn.name}(${fn.params.join(", ")}) {\n${decl}\n${body}\n}`;
+    const asyncKw = this.mode === "terminal" ? "async " : "";
+    return `${asyncKw}function ${fn.name}(${fn.params.join(", ")}) {\n${decl}\n${body}\n}`;
   }
 
   genStmt(node) {
@@ -234,6 +294,10 @@ class Transpiler {
       case "Compare":
         return `(${this.genExpr(node.left)} ${COMPARE_JS[node.op]} ${this.genExpr(node.right)})`;
       case "BoolOp": {
+        if (this.mode === "terminal") {
+          const helper = node.op === "and" ? "__andAsync" : "__orAsync";
+          return `(await __rt.${helper}(async () => (${this.genExpr(node.left)}), async () => (${this.genExpr(node.right)})))`;
+        }
         const helper = node.op === "and" ? "__and" : "__or";
         return `__rt.${helper}(() => (${this.genExpr(node.left)}), () => (${this.genExpr(node.right)}))`;
       }
@@ -247,15 +311,26 @@ class Transpiler {
 
   genCall(node) {
     const args = node.args.map((a) => this.genExpr(a)).join(", ");
-    if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
-      return `__rt.${RUNTIME_BUILTINS[node.callee]}(${args})`;
+    let callExpr;
+    if (node.module) {
+      // module_name.function_name() — an imported sibling file's function
+      // (spec section 6). Never a builtin, so no RUNTIME_BUILTINS lookup.
+      assertValidIdentifier(node.module, node.line);
+      assertValidIdentifier(node.callee, node.line);
+      callExpr = `${node.module}.${node.callee}(${args})`;
+    } else if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
+      callExpr = `__rt.${RUNTIME_BUILTINS[node.callee]}(${args})`;
+    } else {
+      assertValidIdentifier(node.callee, node.line);
+      callExpr = `${node.callee}(${args})`;
     }
-    assertValidIdentifier(node.callee, node.line);
-    return `${node.callee}(${args})`;
+    return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
   }
 }
 
 // Maps BambooScript stdlib call names to BambooRuntime method names.
+// Every value is identical to its key today; kept as a map (rather than a
+// Set) so a call name and its runtime method are free to diverge later.
 const RUNTIME_BUILTINS = {
   // Drawing primitives + turtle movement (spec 3.3)
   background: "background",
@@ -350,7 +425,19 @@ const RUNTIME_BUILTINS = {
   textSize: "textSize",
   textAlign: "textAlign",
   textFont: "textFont",
+
+  // Terminal tab (spec 3.6): print/input work in both modes, but input()
+  // only does anything useful in Terminal mode (see runtime.js / TerminalRuntime).
+  print: "print",
+  input: "input",
 };
+
+// Builtin names that only make sense in Canvas mode — used by
+// TerminalRuntime to stub them out with a friendly redirect error instead
+// of a confusing "not a function" crash.
+export const CANVAS_ONLY_BUILTIN_NAMES = Object.keys(RUNTIME_BUILTINS).filter(
+  (name) => name !== "range" && name !== "print" && name !== "input"
+);
 
 function collectAssignedNames(stmts, into) {
   for (const stmt of stmts) {
@@ -375,6 +462,14 @@ function collectAssignedNames(stmts, into) {
   }
 }
 
-export function transpile(program) {
-  return new Transpiler().transpileProgram(program);
+export function transpile(program, { mode = "canvas" } = {}) {
+  return new Transpiler(mode).transpileProgram(program, "lifecycle");
+}
+
+// Compiles a sibling module file (spec section 6) into a namespace-object
+// expression: `const panda = <this>;` in the assembled script. Always
+// compiles in sync ("canvas") mode — see the file-level comment.
+export function transpileLibrary(program) {
+  const body = new Transpiler("canvas").transpileProgram(program, "all");
+  return `(() => {\n${body}\n})()`;
 }
