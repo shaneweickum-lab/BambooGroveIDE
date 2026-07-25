@@ -3,246 +3,141 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BambooGrove IDE</title>
+  <title>BambooScript — Write like Python. Run like JavaScript.</title>
+  <meta name="description" content="BambooScript is a Python-flavored scripting language for BambooGrove, a canvas-based, p5.js-compatible IDE that runs entirely in your browser — no installs, no accounts." />
   <link rel="icon" type="image/svg+xml" href="assets/bamboo-script-icon.svg" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="landing.css" />
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
-      <div class="brand">
-        <img class="brand-icon" src="assets/bamboo-script-icon.svg" alt="" width="28" height="28" />
-        <span class="brand-name">BambooGrove</span>
-      </div>
-
-      <div class="file-controls">
-        <input id="filename" class="filename-input" value="main.bs" spellcheck="false" aria-label="Sketch file name" />
-        <button id="btn-new" class="btn" title="New sketch">New</button>
-        <button id="btn-save" class="btn" title="Save (Ctrl/Cmd+S)">Save</button>
-        <button id="btn-save-as" class="btn" title="Save a copy and download the .bs file">Save As</button>
-        <button id="btn-open" class="btn" title="Open a .bs file from disk">Open</button>
-        <input id="file-upload" type="file" accept=".bs,text/plain" hidden />
-        <button id="btn-rename" class="btn" title="Rename this saved sketch">Rename</button>
-        <button id="btn-delete" class="btn btn-danger" title="Delete this saved sketch">Delete</button>
-      </div>
-
-      <div class="run-controls">
-        <button id="btn-run" class="btn btn-primary" title="Run (Ctrl/Cmd+Enter)">▶ Run</button>
-        <button id="btn-stop" class="btn" title="Stop">■ Stop</button>
-      </div>
-    </header>
-
-    <div class="status-bar" id="status" role="status"></div>
-
-    <div class="main">
-      <aside class="sidebar">
-        <h2>My Sketches</h2>
-        <ul id="file-list" class="file-list"></ul>
-      </aside>
-
-      <section class="editor-pane">
-        <div class="project-files" id="project-files" hidden></div>
-        <div class="editor-body">
-          <div class="editor-gutter" id="gutter" aria-hidden="true">1</div>
-          <div class="editor-surface">
-            <pre class="editor-highlight" id="highlight" aria-hidden="true"><code id="highlight-code"></code></pre>
-            <textarea
-              id="code"
-              class="editor-input"
-              spellcheck="false"
-              autocapitalize="off"
-              autocomplete="off"
-              autocorrect="off"
-              wrap="off"
-            ></textarea>
-          </div>
-        </div>
-      </section>
-
-      <section class="output-pane">
-        <div class="output-tabs" role="tablist">
-          <button class="output-tab active" data-tab="canvas" role="tab" aria-selected="true">Canvas</button>
-          <button class="output-tab" data-tab="terminal" role="tab" aria-selected="false">Terminal</button>
-          <button class="output-tab" data-tab="reference" role="tab" aria-selected="false">Reference</button>
-        </div>
-
-        <div class="tab-panel active" id="tab-canvas" data-panel="canvas">
-          <canvas id="canvas" width="480" height="480"></canvas>
-          <div id="error-console" class="error-console" hidden></div>
-        </div>
-
-        <div class="tab-panel" id="tab-terminal" data-panel="terminal">
-          <div id="terminal-output" class="terminal-output" aria-live="polite"></div>
-          <form id="terminal-input-form" class="terminal-input-row" hidden>
-            <span id="terminal-prompt" class="terminal-prompt"></span>
-            <input id="terminal-input" class="terminal-input" type="text" autocomplete="off" spellcheck="false" aria-label="Terminal input" />
-          </form>
-        </div>
-
-        <div class="tab-panel" id="tab-reference" data-panel="reference">
-          <div class="reference">
-            <section>
-              <h3>Syntax</h3>
-              <dl>
-                <dt><code>def name(params):</code></dt><dd>Define a function.</dd>
-                <dt><code># comment</code></dt><dd>Single-line comment.</dd>
-                <dt><code>if / elif / else</code></dt><dd>Conditionals, Python-style indentation.</dd>
-                <dt><code>for i in range(n):</code></dt><dd>Loop <code>n</code> times, <code>i</code> from 0.</dd>
-                <dt><code>while cond:</code></dt><dd>Loop while <code>cond</code> is true.</dd>
-                <dt><code>and / or / not</code></dt><dd>Boolean operators.</dd>
-                <dt><code>[1, 2, 3]</code></dt><dd>List literal; index with <code>list[0]</code>.</dd>
-                <dt><code>return value</code></dt><dd>Return from a function (inside a <code>def</code> only).</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Lifecycle</h3>
-              <dl>
-                <dt><code>def setup():</code></dt><dd>Runs once, when the sketch starts.</dd>
-                <dt><code>def draw():</code></dt><dd>Runs once per frame, forever (unless <code>no_loop()</code>).</dd>
-                <dt><code>no_loop() / loop()</code></dt><dd>Stop / resume the <code>draw()</code> loop.</dd>
-                <dt><code>frame_count</code> / <code>frameCount</code></dt><dd>Frames drawn so far.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Drawing</h3>
-              <dl>
-                <dt><code>background(r, g, b)</code></dt><dd>Fill the whole canvas.</dd>
-                <dt><code>stroke(r, g, b)</code> / <code>fill(r, g, b)</code></dt><dd>Set outline / fill color. Also accept a single gray value, or a <code>color()</code> value.</dd>
-                <dt><code>no_stroke()</code> / <code>no_fill()</code></dt><dd>Turn outline / fill off (also <code>noStroke()</code>/<code>noFill()</code>).</dd>
-                <dt><code>line(x1, y1, x2, y2)</code></dt><dd>Straight line between two points.</dd>
-                <dt><code>rect(x, y, w, h)</code></dt><dd>Rectangle. Position meaning depends on <code>rectMode()</code>.</dd>
-                <dt><code>circle(x, y, r)</code></dt><dd>Circle centered at (x, y) with radius <code>r</code>.</dd>
-                <dt><code>ellipse(x, y, w, h)</code></dt><dd>Ellipse; position meaning depends on <code>ellipseMode()</code>.</dd>
-                <dt><code>arc(x, y, w, h, start, stop)</code></dt><dd>Arc of an ellipse, angles in radians.</dd>
-                <dt><code>triangle(...)</code> / <code>quad(...)</code></dt><dd>3- or 4-point polygon from raw coordinates.</dd>
-                <dt><code>square(x, y, s)</code></dt><dd>Shorthand for <code>rect(x, y, s, s)</code>.</dd>
-                <dt><code>point(x, y)</code></dt><dd>A single dot, sized by <code>strokeWeight()</code>.</dd>
-                <dt><code>text(string, x, y)</code></dt><dd>Draw text; see <code>textSize()</code>/<code>textAlign()</code>/<code>textFont()</code>.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Turtle movement</h3>
-              <dl>
-                <dt><code>forward(distance)</code></dt><dd>Move forward, drawing if the pen is down.</dd>
-                <dt><code>turn(degrees)</code></dt><dd>Rotate heading (clockwise-positive). Aliases: <code>right()</code>, <code>left(-degrees)</code>.</dd>
-                <dt><code>pen_up() / pen_down()</code></dt><dd>Stop / resume drawing while moving.</dd>
-                <dt><code>go_to(x, y)</code></dt><dd>Move to an absolute position.</dd>
-                <dt><code>home()</code></dt><dd>Return to the canvas center, heading reset to 0 (up).</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Color</h3>
-              <dl>
-                <dt><code>color(r, g, b, a)</code></dt><dd>Build a reusable color value.</dd>
-                <dt><code>red()/green()/blue()/alpha()</code></dt><dd>Read a channel back out of a <code>color()</code> value.</dd>
-                <dt><code>lerpColor(c1, c2, amt)</code></dt><dd>Blend between two colors.</dd>
-                <dt><code>colorMode("rgb" | "hsb", ...)</code></dt><dd>Switch how color channels are interpreted.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Transform</h3>
-              <dl>
-                <dt><code>push() / pop()</code></dt><dd>Save / restore the current style + position/rotation.</dd>
-                <dt><code>translate(x, y)</code></dt><dd>Shift the origin.</dd>
-                <dt><code>rotate(angle)</code></dt><dd>Rotate around the origin, radians.</dd>
-                <dt><code>scale(x, y)</code></dt><dd>Scale subsequent drawing.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Math</h3>
-              <dl>
-                <dt><code>abs/ceil/floor/round/sq/sqrt/pow</code></dt><dd>Basic math.</dd>
-                <dt><code>sin/cos/tan(angle)</code></dt><dd>Trig, angle in radians.</dd>
-                <dt><code>radians(deg) / degrees(rad)</code></dt><dd>Angle unit conversion.</dd>
-                <dt><code>constrain(n, low, high)</code></dt><dd>Clamp a number to a range.</dd>
-                <dt><code>dist(x1, y1, x2, y2)</code></dt><dd>Distance between two points.</dd>
-                <dt><code>lerp(start, stop, amt)</code></dt><dd>Interpolate between two numbers.</dd>
-                <dt><code>map(v, s1, e1, s2, e2)</code></dt><dd>Remap a number from one range to another.</dd>
-                <dt><code>random() / random(max) / random(min, max)</code></dt><dd>Random number; also <code>random(a_list)</code> picks a random item.</dd>
-                <dt><code>randomSeed(n)</code></dt><dd>Make <code>random()</code> repeatable.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Input &amp; events</h3>
-              <dl>
-                <dt><code>mouse_x / mouse_y</code> (<code>mouseX</code>/<code>mouseY</code>)</dt><dd>Current mouse position.</dd>
-                <dt><code>is_pressed()</code> / <code>mouseIsPressed</code></dt><dd>Is a mouse button currently down?</dd>
-                <dt><code>key_pressed</code> / <code>key</code> / <code>keyIsPressed</code></dt><dd>Last key, and whether one is currently down.</dd>
-                <dt><code>def mousePressed():</code></dt><dd>Called on mouse-down (also <code>mouseReleased</code>, <code>mouseClicked</code>, <code>mouseMoved</code>, <code>mouseDragged</code>).</dd>
-                <dt><code>def keyPressed():</code></dt><dd>Called on key-down (also <code>keyReleased</code>).</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Terminal tab</h3>
-              <dl>
-                <dt><code>print(value, ...)</code></dt><dd>Write a line to the terminal. Works in both Canvas and Terminal mode.</dd>
-                <dt><code>input(prompt)</code></dt><dd>Terminal mode only: pause and wait for the user to type a line.</dd>
-              </dl>
-              <p class="reference-note">Terminal mode runs the same code top-to-bottom as a plain script — no <code>setup()</code>/<code>draw()</code> needed, and canvas-drawing functions aren't available there.</p>
-            </section>
-
-            <section>
-              <h3>Modules (multi-file projects)</h3>
-              <dl>
-                <dt><code>import name</code></dt><dd>Import a sibling <code>name.bs</code> file; call its functions as <code>name.function()</code>.</dd>
-                <dt><code>from name import fn</code></dt><dd>Import one function directly. Add <code>as alias</code> to rename it.</dd>
-              </dl>
-              <p class="reference-note">Use the file chips above the editor to add and switch between files in the same project.</p>
-            </section>
-
-            <section>
-              <h3>Curves &amp; custom shapes</h3>
-              <dl>
-                <dt><code>bezier(x1,y1, x2,y2, x3,y3, x4,y4)</code></dt><dd>A curved line through two control points.</dd>
-                <dt><code>beginShape() / vertex(x, y) / endShape(mode)</code></dt><dd>Build a custom polygon from any number of points. Pass <code>"close"</code> to <code>endShape</code> to close it into a filled shape.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Noise</h3>
-              <dl>
-                <dt><code>noise(x, y, z)</code></dt><dd>Smooth pseudo-random value (Perlin noise), unlike <code>random()</code> which jumps around.</dd>
-                <dt><code>noiseDetail(octaves, falloff)</code></dt><dd>Adjust noise's texture — more octaves add finer detail.</dd>
-                <dt><code>noiseSeed(n)</code></dt><dd>Make <code>noise()</code> repeatable.</dd>
-              </dl>
-            </section>
-
-            <section>
-              <h3>Vector</h3>
-              <dl>
-                <dt><code>createVector(x, y, z)</code></dt><dd>A position/direction with <code>.x</code>/<code>.y</code>/<code>.z</code>.</dd>
-                <dt><code>v.add(other) / v.sub(other)</code></dt><dd>Add/subtract another vector, in place.</dd>
-                <dt><code>v.mult(n) / v.div(n)</code></dt><dd>Scale by a number, in place.</dd>
-                <dt><code>v.mag() / v.normalize() / v.limit(max)</code></dt><dd>Length; scale to length 1; cap the length.</dd>
-                <dt><code>v.heading() / v.rotate(angle)</code></dt><dd>Direction in radians; rotate in place.</dd>
-                <dt><code>v.dist(other) / v.dot(other)</code></dt><dd>Distance to / dot product with another vector.</dd>
-                <dt><code>v.copy()</code></dt><dd>An independent duplicate (methods mutate the original otherwise).</dd>
-              </dl>
-              <p class="reference-note">There's no <code>+</code>/<code>-</code> for vectors (JS has no operator overloading) — use the methods above, the same way real p5.js sketches do.</p>
-            </section>
-
-            <section>
-              <h3>Data conversion</h3>
-              <dl>
-                <dt><code>int(v) / float(v)</code></dt><dd>Convert a string or boolean to a number.</dd>
-                <dt><code>str(v)</code></dt><dd>Convert anything to text (numbers, <code>True</code>/<code>False</code>, lists).</dd>
-                <dt><code>boolean(v)</code></dt><dd>Convert to <code>True</code>/<code>False</code> using the same rules as <code>if</code>.</dd>
-              </dl>
-            </section>
-          </div>
-        </div>
-      </section>
+  <nav class="nav">
+    <div class="wrap">
+      <a class="nav-brand" href="#top">
+        <img src="assets/png/logo.png" alt="" width="34" height="34" />
+        BambooScript
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#showcase">How it works</a></li>
+        <li><a href="https://github.com/shaneweickum-lab/BambooGroveIDE" target="_blank" rel="noopener">GitHub</a></li>
+      </ul>
+      <a class="btn btn-ghost" href="ide.html">Launch the IDE</a>
     </div>
-  </div>
+  </nav>
 
-  <script type="module" src="src/app.js"></script>
+  <header class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-copy">
+        <span class="eyebrow">Free &middot; runs entirely in your browser</span>
+        <h1>Write like Python.<br /><span class="accent">Run like JavaScript.</span></h1>
+        <p class="lede">
+          BambooScript is a Python-flavored scripting language built for
+          <strong>BambooGrove</strong> — a canvas-based, p5.js-compatible IDE
+          that teaches programming through turtle graphics and visual code.
+          No installs, no accounts, no build step.
+        </p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="ide.html">Launch the IDE →</a>
+          <a class="btn btn-outline" href="https://github.com/shaneweickum-lab/BambooGroveIDE" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img src="assets/png/hero.png" alt="BambooScript logo and a code editor mockup showing a turtle-graphics loop next to its rendered bamboo stalk, with the tagline: Write like Python. Run like JavaScript." width="1254" height="1254" />
+      </div>
+    </div>
+  </header>
+
+  <section class="features" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Everything you need to start drawing with code</h2>
+        <p>One shared editor, three tabs, and a standard library that grows with you.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <span class="icon">🐢</span>
+          <h3>Turtle &amp; p5.js graphics</h3>
+          <p><code>forward()</code>/<code>turn()</code> turtle moves, plus a p5.js-compatible layer — shapes, color, noise, vectors — for anyone who already knows p5.js.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">🐍</span>
+          <h3>Python-flavored syntax</h3>
+          <p>Indentation, <code>def</code>, <code>for</code>/<code>while</code>/<code>if</code> — familiar from the first line, with none of Python's install overhead.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">⚡</span>
+          <h3>Runs like JavaScript</h3>
+          <p>No server, no build step. Scripts transpile straight to JS and run instantly in the browser tab.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">💻</span>
+          <h3>Terminal tab</h3>
+          <p>Switch the same editor to a plain <code>print()</code>/<code>input()</code> mode for classic top-to-bottom scripting practice.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">📦</span>
+          <h3>Multi-file modules</h3>
+          <p><code>import</code> / <code>from ... import</code> across a flat-folder project, so bigger sketches can be split across files.</p>
+        </div>
+        <div class="feature-card">
+          <span class="icon">📖</span>
+          <h3>Built-in reference</h3>
+          <p>A full standard-library cheat sheet lives one tab away — never leave the IDE to look something up.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="showcase" id="showcase">
+    <div class="wrap">
+      <div class="showcase-copy">
+        <h2>From six lines to a hexagon</h2>
+        <p>
+          BambooScript reads like Python and moves like a turtle:
+          <code>forward()</code> and <code>turn()</code> drive a pen around
+          the canvas, so a loop becomes a shape almost immediately.
+        </p>
+        <ul>
+          <li>No boilerplate — just <code>def setup():</code> and <code>def draw():</code></li>
+          <li><code>for</code> and <code>while</code> both work exactly like you'd expect</li>
+          <li>Swap in the p5.js layer — <code>circle()</code>, <code>noise()</code>, <code>createVector()</code> — whenever you're ready for more</li>
+        </ul>
+      </div>
+      <div class="code-window">
+        <div class="code-window-bar"><span></span><span></span><span></span></div>
+        <pre><code><span class="tok-kw">def</span> setup():
+    <span class="tok-builtin">background</span>(<span class="tok-num">20</span>, <span class="tok-num">20</span>, <span class="tok-num">20</span>)
+    <span class="tok-builtin">stroke</span>(<span class="tok-num">34</span>, <span class="tok-num">139</span>, <span class="tok-num">34</span>)
+
+<span class="tok-kw">def</span> draw():
+    <span class="tok-builtin">no_loop</span>()
+    <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-builtin">range</span>(<span class="tok-num">6</span>):
+        <span class="tok-builtin">forward</span>(<span class="tok-num">120</span>)
+        <span class="tok-builtin">turn</span>(<span class="tok-num">60</span>)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-band">
+    <div class="wrap">
+      <h2>Ready to try it?</h2>
+      <p>No installs, no accounts — just open the IDE and start writing.</p>
+      <a class="btn btn-primary" href="ide.html">Launch the IDE →</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="footer-brand">
+        <img src="assets/bamboo-script-icon.svg" alt="" width="24" height="24" />
+        BambooScript
+      </div>
+      <nav>
+        <a href="ide.html">IDE</a>
+        <a href="https://github.com/shaneweickum-lab/BambooGroveIDE" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/shaneweickum-lab/BambooGroveIDE/blob/main/docs/SPEC.md" target="_blank" rel="noopener">Spec</a>
+      </nav>
+      <div class="copyright">Built for learning — write like Python, run like JavaScript.</div>
+    </div>
+  </footer>
 </body>
 </html>

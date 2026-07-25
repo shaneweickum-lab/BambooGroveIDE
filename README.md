@@ -17,9 +17,11 @@ No build step, no dependencies to install.
 npm start
 ```
 
-Then open http://localhost:8080. (`serve.js` is a ~40-line zero-dependency
-static file server — BambooScript ships as pure client-side JS per the
-spec's architecture decision in section 6.2.)
+Then open http://localhost:8080 — that's the marketing landing page
+(`index.html`). Click "Launch the IDE" (or go straight to
+http://localhost:8080/ide.html) for the actual editor. (`serve.js` is a
+~40-line zero-dependency static file server — BambooScript ships as pure
+client-side JS per the spec's architecture decision in section 6.2.)
 
 To run the test suite:
 
@@ -107,14 +109,20 @@ npm test
   A "project" is a flat group of files sharing a `projectId` (the entry
   file's own id doubles as the project's id), backing the module system
   above.
-- **Editor shell** (`index.html`, `styles.css`, `src/app.js`): one shared
+- **Editor shell** (`ide.html`, `styles.css`, `src/app.js`): one shared
   code pane (line numbers + syntax highlighting) feeding a tabbed output
   pane — Canvas / Terminal / Reference — plus Run/Stop, the sketch list
   sidebar, and a project-files chip row for switching between a
   project's main file and its sibling modules (with a "+" to add one).
+- **Landing page** (`index.html`, `landing.css`): the site's marketing
+  front door — hero, feature grid, a code showcase, and a "Launch the
+  IDE" call to action that links to `ide.html`. Static HTML/CSS, no JS
+  framework, consistent with the "no build step" design (spec 1.2).
 - **File icon** (`assets/bamboo-script-icon.svg`, plus 16/32/64/128 PNG
   fallbacks in `assets/png/`): the `</>`-with-bamboo-stalk mark from
-  spec 2.3.
+  spec 2.3. `assets/png/logo.png` and `assets/png/hero.png` are the
+  landing page's fuller-color brand artwork (glow-mark logo and the
+  bamboo/editor/wordmark hero illustration).
 - **Examples** (`examples/*.bs`): the spec's own hexagon/octagon
   examples, a `while`-loop square, `bamboo_stalk.bs` — the "draw a
   bamboo stalk using loops" lesson from spec section 7 — 
@@ -137,7 +145,8 @@ npm test
 ## Project layout
 
 ```
-index.html, styles.css      Editor shell
+index.html, landing.css      Marketing landing page
+ide.html, styles.css         Editor shell
 src/lexer.js                 Tokenizer
 src/parser.js                Recursive-descent parser -> AST
 src/transpiler.js             AST -> JS codegen (Canvas + Terminal modes, library modules)
