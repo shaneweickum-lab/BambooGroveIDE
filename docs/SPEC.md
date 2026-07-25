@@ -123,6 +123,11 @@ Every `.bs` file uses the BambooScript mark as its icon:
 - Functions: `def name(params):`, `return`
 - Loops: `for i in range(n):`, `while condition:`
 - Lists: basic list literals and indexing
+- Strings: single/double-quoted literals with `\n`/`\t`/`\\`/`\"`/`\'`
+  escapes, plus f-strings (`f"hi {name}!"`) — any expression inside
+  `{...}` is evaluated and stringified the same way `print()`/`str()`
+  format values; `{{`/`}}` escape a literal brace, and `{expr:.Nf}`
+  fixes a number to `N` decimal places
 - Comments: `#` single line only in v0.1
 
 ### 3.3 Visual/Canvas Standard Library (v0.1 scope)

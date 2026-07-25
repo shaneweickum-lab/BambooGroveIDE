@@ -287,6 +287,27 @@ export class RuntimeBase {
     return this._stringify(v);
   }
 
+  // f-string formatting (spec 3.6-adjacent): no format spec just falls back
+  // to the same stringification print()/str() use; ':.Nf' fixes a number
+  // to N decimal places, matching Python's f"{x:.2f}".
+  __fstr(value, spec, line) {
+    if (spec == null) return this._stringify(value);
+    const fixed = /^\.(\d+)f$/.exec(spec);
+    if (fixed) {
+      if (typeof value !== "number") {
+        throw new BambooRuntimeError(
+          `f-string format ':${spec}' needs a number, but got ${describeType(value)}.`,
+          line
+        );
+      }
+      return value.toFixed(Number(fixed[1]));
+    }
+    throw new BambooRuntimeError(
+      `Unsupported f-string format ':${spec}' — only ':.Nf' (fixed decimal places) is supported.`,
+      line
+    );
+  }
+
   print(...args) {
     const line = args.map((a) => this._stringify(a)).join(" ");
     if (typeof this.onPrint === "function") this.onPrint(line);

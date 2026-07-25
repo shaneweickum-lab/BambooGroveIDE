@@ -56,3 +56,56 @@ test("throws BambooSyntaxError with a line number on bad indentation", () => {
 test("throws on an unterminated string", () => {
   assert.throws(() => tokenize('text("unterminated)\n'), BambooSyntaxError);
 });
+
+// --- f-strings ---
+
+test("tokenizes an f-string into text/expr parts", () => {
+  const tokens = tokenize('x = f"hi {name}, score {a + b}!"\n');
+  const fstr = tokens.find((t) => t.type === "FSTRING");
+  assert.deepEqual(fstr.value, [
+    { type: "text", value: "hi " },
+    { type: "expr", source: "name", spec: null, line: 1 },
+    { type: "text", value: ", score " },
+    { type: "expr", source: "a + b", spec: null, line: 1 },
+    { type: "text", value: "!" },
+  ]);
+});
+
+test("tokenizes an f-string format spec after ':'", () => {
+  const tokens = tokenize('f"{x:.2f}"\n');
+  const fstr = tokens.find((t) => t.type === "FSTRING");
+  assert.deepEqual(fstr.value, [{ type: "expr", source: "x", spec: ".2f", line: 1 }]);
+});
+
+test("f-string supports {{ and }} as literal braces", () => {
+  const tokens = tokenize('f"{{literal}} {x}"\n');
+  const fstr = tokens.find((t) => t.type === "FSTRING");
+  assert.deepEqual(fstr.value, [
+    { type: "text", value: "{literal} " },
+    { type: "expr", source: "x", spec: null, line: 1 },
+  ]);
+});
+
+test("f-string expression can contain nested strings/brackets without ending early", () => {
+  const tokens = tokenize('f"{greet(\'a}b\', [1, 2])}"\n');
+  const fstr = tokens.find((t) => t.type === "FSTRING");
+  assert.deepEqual(fstr.value, [{ type: "expr", source: "greet('a}b', [1, 2])", spec: null, line: 1 }]);
+});
+
+test("an f-string with no interpolation still tokenizes (empty parts allowed)", () => {
+  const tokens = tokenize('f"just text"\n');
+  const fstr = tokens.find((t) => t.type === "FSTRING");
+  assert.deepEqual(fstr.value, [{ type: "text", value: "just text" }]);
+});
+
+test("throws on an empty {} expression in an f-string", () => {
+  assert.throws(() => tokenize('f"{}"\n'), BambooSyntaxError);
+});
+
+test("throws on a stray '}' in an f-string", () => {
+  assert.throws(() => tokenize('f"oops }"\n'), BambooSyntaxError);
+});
+
+test("throws on an f-string missing its closing '}'", () => {
+  assert.throws(() => tokenize('f"{x"\n'), BambooSyntaxError);
+});

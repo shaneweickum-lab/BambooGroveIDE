@@ -145,3 +145,42 @@ test("still rejects bare 'return' at the top level", () => {
     return true;
   });
 });
+
+// --- f-strings ---
+
+test("parses an f-string into an FString node with parsed sub-expressions", () => {
+  const ast = parse('x = f"hi {name}!"\n');
+  const value = ast.body[0].value;
+  assert.equal(value.type, "FString");
+  assert.equal(value.parts.length, 3);
+  assert.deepEqual(value.parts[0], { type: "text", value: "hi " });
+  assert.equal(value.parts[1].type, "expr");
+  assert.equal(value.parts[1].expr.type, "Name");
+  assert.equal(value.parts[1].expr.name, "name");
+  assert.deepEqual(value.parts[2], { type: "text", value: "!" });
+});
+
+test("parses a full expression (not just a bare name) inside an f-string", () => {
+  const ast = parse('x = f"{a + b * 2}"\n');
+  const expr = ast.body[0].value.parts[0].expr;
+  assert.equal(expr.type, "BinOp");
+  assert.equal(expr.op, "+");
+});
+
+test("carries the format spec through onto the expr part", () => {
+  const ast = parse('x = f"{y:.1f}"\n');
+  assert.equal(ast.body[0].value.parts[0].spec, ".1f");
+});
+
+test("an f-string with no {} interpolation still works like a plain string", () => {
+  const ast = parse('x = f"plain"\n');
+  assert.deepEqual(ast.body[0].value.parts, [{ type: "text", value: "plain" }]);
+});
+
+test("rejects a malformed expression inside an f-string", () => {
+  assert.throws(() => parse('x = f"{1 2}"\n'), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /Invalid expression inside f-string/);
+    return true;
+  });
+});

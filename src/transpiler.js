@@ -296,6 +296,8 @@ class Transpiler {
         return JSON.stringify(node.value);
       case "Str":
         return JSON.stringify(node.value);
+      case "FString":
+        return this.genFString(node);
       case "BoolLiteral":
         return node.value ? "true" : "false";
       case "Name":
@@ -358,6 +360,20 @@ class Transpiler {
     const args = node.args.map((a) => this.genExpr(a)).join(", ");
     const callExpr = `${obj}.${node.method}(${args})`;
     return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
+  }
+
+  // f"...{expr}..." (spec 3.6-adjacent convenience): each {expr} is
+  // formatted through the runtime (same Python-flavored stringification
+  // print()/str() use), with an optional ':spec' for numeric formatting.
+  genFString(node) {
+    if (node.parts.length === 0) return `""`;
+    const pieces = node.parts.map((part) => {
+      if (part.type === "text") return JSON.stringify(part.value);
+      const exprCode = this.genExpr(part.expr);
+      const specCode = part.spec ? JSON.stringify(part.spec) : "null";
+      return `__rt.__fstr(${exprCode}, ${specCode}, ${node.line})`;
+    });
+    return `(${pieces.join(" + ")})`;
   }
 }
 

@@ -353,6 +353,31 @@ test("data conversion: int/float/str/boolean", () => {
   assert.equal(rt.boolean([1]), true);
 });
 
+test("__fstr(): no spec falls back to the same stringification as str()/print()", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__fstr("hi", null), "hi");
+  assert.equal(rt.__fstr(42, null), "42");
+  assert.equal(rt.__fstr(true, null), "True");
+  assert.equal(rt.__fstr(null, null), "None");
+  assert.equal(rt.__fstr([1, "a"], null), "[1, 'a']");
+});
+
+test("__fstr(): ':.Nf' formats a number to fixed decimal places", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__fstr(3.14159, ".2f"), "3.14");
+  assert.equal(rt.__fstr(3, ".0f"), "3");
+});
+
+test("__fstr(): ':.Nf' on a non-number throws a friendly runtime error", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__fstr("nope", ".2f"), BambooRuntimeError);
+});
+
+test("__fstr(): an unsupported format spec throws a friendly runtime error", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__fstr(3, "d"), BambooRuntimeError);
+});
+
 test("bezier() strokes without throwing, and respects no_stroke()", () => {
   const rt = new BambooRuntime(fakeCanvas());
   assert.doesNotThrow(() => rt.bezier(0, 0, 10, 10, 20, 10, 30, 0));

@@ -90,6 +90,80 @@ export function tokenize(source) {
       continue;
     }
 
+    if ((ch === "f" || ch === "F") && (source[pos + 1] === '"' || source[pos + 1] === "'")) {
+      pos++; // consume the 'f'
+      const quote = source[pos];
+      const startLine = line;
+      pos++; // consume the opening quote
+      const parts = [];
+      let buf = "";
+      while (pos < len && source[pos] !== quote) {
+        const c = source[pos];
+        if (c === "\n") {
+          throw new BambooSyntaxError("f-string is missing its closing quote.", startLine);
+        }
+        if (c === "\\" && pos + 1 < len) {
+          const next = source[pos + 1];
+          const escapes = { n: "\n", t: "\t", '"': '"', "'": "'", "\\": "\\" };
+          buf += escapes[next] !== undefined ? escapes[next] : next;
+          pos += 2;
+          continue;
+        }
+        if (c === "{" && source[pos + 1] === "{") { buf += "{"; pos += 2; continue; }
+        if (c === "}" && source[pos + 1] === "}") { buf += "}"; pos += 2; continue; }
+        if (c === "}") {
+          throw new BambooSyntaxError("f-string has a stray '}' — use '}}' for a literal brace.", startLine);
+        }
+        if (c === "{") {
+          if (buf) { parts.push({ type: "text", value: buf }); buf = ""; }
+          pos++; // consume '{'
+          const exprStart = pos;
+          let depth = 0; // nesting of ( and [ only — BambooScript has no {} literals
+          let inString = null;
+          let specStart = -1;
+          while (pos < len) {
+            const cc = source[pos];
+            if (inString) {
+              if (cc === "\\") { pos += 2; continue; }
+              if (cc === inString) inString = null;
+              pos++;
+              continue;
+            }
+            if (cc === '"' || cc === "'") { inString = cc; pos++; continue; }
+            if (cc === "(" || cc === "[") { depth++; pos++; continue; }
+            if (cc === ")" || cc === "]") { depth--; pos++; continue; }
+            if (cc === ":" && depth === 0 && specStart === -1) { specStart = pos; pos++; continue; }
+            if (cc === "}" && depth === 0) break;
+            if (cc === "\n") {
+              throw new BambooSyntaxError("f-string expression is missing its closing '}'.", startLine);
+            }
+            pos++;
+          }
+          if (pos >= len) {
+            throw new BambooSyntaxError("f-string expression is missing its closing '}'.", startLine);
+          }
+          const exprEnd = specStart === -1 ? pos : specStart;
+          const exprSource = source.slice(exprStart, exprEnd).trim();
+          const spec = specStart === -1 ? null : source.slice(specStart + 1, pos).trim();
+          if (!exprSource) {
+            throw new BambooSyntaxError("f-string has an empty '{}' expression.", startLine);
+          }
+          parts.push({ type: "expr", source: exprSource, spec, line: startLine });
+          pos++; // consume closing '}'
+          continue;
+        }
+        buf += c;
+        pos++;
+      }
+      if (pos >= len) {
+        throw new BambooSyntaxError("f-string is missing its closing quote.", startLine);
+      }
+      if (buf) parts.push({ type: "text", value: buf });
+      pos++; // closing quote
+      push("FSTRING", parts);
+      continue;
+    }
+
     if (ch === '"' || ch === "'") {
       const quote = ch;
       const startLine = line;

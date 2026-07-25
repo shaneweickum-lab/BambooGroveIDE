@@ -36,7 +36,11 @@ npm test
   recursive-descent parser, covering the full v0.1 grammar — `def`,
   `if`/`elif`/`else`, `for ... in range()`/`for ... in <list>`, `while`,
   `return`, list literals + indexing, `and`/`or`/`not`, comparisons,
-  arithmetic, and `#` comments.
+  arithmetic, `#` comments, and f-strings (`f"hi {name}, {x:.2f}"` — the
+  lexer splits the literal into text/expression segments, each `{expr}`
+  is re-tokenized and parsed as a full BambooScript expression in its
+  own right, so `f"{a + b}"`, nested calls, and even `f"{input()}"` in
+  Terminal mode all work).
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
@@ -140,7 +144,9 @@ npm test
   of Code style): each frame, `missile.bs`'s `steer_toward()` computes
   the desired velocity toward the target, limits how sharply it can
   turn (`Vector.limit()`), and lets `main.bs` draw the result rotated
-  to face its heading.
+  to face its heading. `main.bs` also prints a live telemetry line with
+  an f-string — `f"target: ({target_x:.1f}, {target_y:.1f})  missiles:
+  {NUM_MISSILES}"` — as a real-world demo of the format-spec syntax.
 
 ## Project layout
 
