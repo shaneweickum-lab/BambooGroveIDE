@@ -4,9 +4,9 @@ Version: 0.1 (Draft)
 Status: Pre-development / Planning
 Last Updated: 2026
 
-This document is the source-of-truth design spec that the initial
-implementation in this repository is built against. See `README.md` for
-the current implementation status of each section.
+This document is the source-of-truth design spec that the implementation
+in this repository is built against. See `README.md` for the current
+implementation status of each section.
 
 ## 1. Overview
 
@@ -28,7 +28,17 @@ Together, these two form one ecosystem:
     BambooScript  = the language (syntax + runtime semantics)
     BambooGrove   = the platform (editor + execution environment + storage)
 
-### 1.2 Design Philosophy
+### 1.2 Development Approach
+
+BambooGrove IDE is being built as a fully client-side static web
+application (HTML/CSS/JS, no backend server), developed with Claude
+Code as the primary build tool. This reinforces the "no backend for
+MVP" decision throughout this spec (see Section 5.2, Section 6.2) —
+the entire platform should be deployable as static files (e.g., to
+Vercel, Netlify, GitHub Pages) with zero server-side dependencies for
+v0.1 launch.
+
+### 1.3 Design Philosophy
 
 - Write like Python. Run like JavaScript.
 - No build step visible to the learner — write code, press run, see art.
@@ -41,7 +51,7 @@ Together, these two form one ecosystem:
   (indentation, plain-English keywords, minimal punctuation) without
   claiming to BE Python or run existing Python code.
 
-### 1.3 Primary Use Cases
+### 1.4 Primary Use Cases
 
 - A learner opens BambooGrove, writes a short script, and watches shapes,
   patterns, or animations draw themselves on canvas.
@@ -164,8 +174,11 @@ loop()                    # resume draw() repeat
 - Not a DOM manipulation tool. No HTML element access.
 - Not a general app framework. No routing, no state management patterns.
 - Not Python. Cannot import or run real .py files or PyPI packages.
-- Not multi-file/module system in v0.1 (single-file scripts only).
 - Not networked. No fetch/HTTP/socket support in v0.1.
+- Not a full Python-compatible module system. Import resolves sibling
+  .bs files within the same project folder only (see Section 6) — no
+  subfolders, no dotted paths, not real Python modules or PyPI
+  packages.
 
 ### 3.5 Example Program
 
@@ -179,6 +192,87 @@ def draw():
         forward(120)
         turn(60)
 ```
+
+### 3.6 p5.js API Compatibility Plan
+
+Goal: BambooScript's standard library function names and signatures
+should match p5.js wherever a direct equivalent exists, so anyone who
+knows p5.js (or learns from p5js.org/reference alongside BambooScript)
+can transfer knowledge directly. Function NAMES and PARAMETER ORDER
+mirror p5.js; syntax (indentation, def, snake_case internals where
+BambooScript diverges) stays Python-flavored.
+
+The full p5.js reference (p5js.org/reference) is organized into these
+top-level categories: Shape, Color, Typography, Image, Transform,
+Environment, 3D, Rendering, Math, IO, Events, DOM, Data, Structure,
+Constants, and Foundation. That is a large surface area — full DOM
+element creation, WebGL/3D, shaders, device sensors, and file I/O are
+out of scope for a browser-based visual teaching tool. BambooScript
+implements a deliberate subset, phased by priority:
+
+**PHASE 1 (v0.1 MVP) — direct p5.js name matches:**
+
+- Shape > 2D Primitives: `arc()`, `circle()`, `ellipse()`, `line()`,
+  `point()`, `quad()`, `rect()`, `square()`, `triangle()`
+- Shape > Attributes: `ellipseMode()`, `rectMode()`, `strokeWeight()`,
+  `strokeCap()`, `strokeJoin()`, `noSmooth()`, `smooth()`
+- Color > Setting: `background()`, `fill()`, `noFill()`, `stroke()`,
+  `noStroke()`, `clear()`, `colorMode()`, `blendMode()`
+- Color > Creating & Reading: `color()`, `red()`, `green()`, `blue()`,
+  `alpha()`, `lerpColor()`
+- Transform: `push()`, `pop()`, `translate()`, `rotate()`, `scale()`,
+  `resetMatrix()`
+- Environment: `frameCount`, `frameRate()`, `width`, `height`,
+  `windowWidth`, `windowHeight`, `cursor()`, `noCursor()`
+- Math > Calculation, Trigonometry, Random: `abs()`, `ceil()`,
+  `floor()`, `round()`, `constrain()`, `dist()`, `lerp()`, `map()`,
+  `max()`, `min()`, `pow()`, `sq()`, `sqrt()`, `sin()`, `cos()`,
+  `tan()`, `radians()`, `degrees()`, `random()`, `randomSeed()`
+- Structure: `setup()`, `draw()`, `noLoop()`, `loop()`, `redraw()`,
+  `isLooping()`
+- Events > Keyboard: `keyIsPressed`, `key`, `keyPressed()`,
+  `keyReleased()`
+- Events > Pointer: `mouseX`, `mouseY`, `pmouseX`, `pmouseY`,
+  `mouseIsPressed`, `mousePressed()`, `mouseReleased()`,
+  `mouseDragged()`, `mouseMoved()`, `mouseClicked()`
+- Rendering: `createCanvas()`, `resizeCanvas()`
+- Typography (basic): `text()`, `textSize()`, `textAlign()`,
+  `textFont()`
+- Constants: `PI`, `TWO_PI`, `HALF_PI`, `QUARTER_PI`, `DEGREES`,
+  `RADIANS`
+
+  BambooScript-specific additions (no direct p5.js equivalent, added
+  for the turtle-graphics teaching style): `forward()`, `turn()`,
+  `pen_up()`, `pen_down()`, `go_to()`, `home()`
+
+**PHASE 2 (post-MVP):**
+
+- Shape > Curves and Custom Shapes: `bezier()`, `beginShape()`,
+  `vertex()`, `endShape()` — **implemented**
+- Math > Noise: `noise()`, `noiseDetail()`, `noiseSeed()` —
+  **implemented**
+- Math > p5.Vector: `createVector()` and vector math operations —
+  **implemented** (mutating instance methods that return the vector
+  for chaining, matching real p5.js; no operator overloading since
+  JS doesn't support it)
+- Data > Conversion: `int()`, `float()`, `str()`, `boolean()` —
+  **implemented**
+- Image: `loadImage()`, `image()`, `tint()`, `noTint()` — **deferred**.
+  This needs asset-upload/hosting infrastructure (there's no file
+  storage in a static-only, localStorage-backed IDE yet) and was
+  judged out of scope for this pass. Revisit once the storage layer
+  supports binary assets.
+
+**OUT OF SCOPE** (not planned — conflicts with "visual-only,
+client-side, teaching tool" design boundaries):
+
+- DOM category in full (`createDiv`, `createButton`, `createSlider`,
+  etc.) — BambooScript does not manipulate the surrounding page
+- 3D category (camera, lights, material, shaders, WEBGL mode)
+- IO category (`loadJSON`, `loadTable`, `httpGet`/`httpPost`, file
+  writing) — no network or filesystem access in-browser
+- Events > Acceleration (device motion/orientation sensors)
+- p5.sound (audio) — may be reconsidered in a later major version
 
 ## 4. Execution Model
 
@@ -231,10 +325,6 @@ def draw():
 
 ### 5.3 Later-Phase Features (not required for MVP)
 
-- Public gallery / sharing (like OpenProcessing or the p5.js web editor)
-- Embeddable sketches (iframe embed for the YouTube companion site)
-- Multi-file projects
-- Custom asset uploads (images, sounds)
 - Collaborative/live-share editing
 - Desktop app wrapper (Electron/Tauri) with native `.bs` file association
 
@@ -247,15 +337,124 @@ def draw():
   preview pane
 - Tagline (candidate): "Write like Python. Run like JavaScript."
 
-## 6. Open Questions / Decisions Needed
+## 6. Module System and Folder Structure
 
-### 6.1 Naming/Scope
+### 6.1 Goal
+
+BambooScript projects support splitting code across multiple `.bs`
+files, and importing between them using Python-style import syntax.
+This lets a project grow beyond a single `main.bs` file — e.g.,
+separating a reusable "panda" character module from the main sketch
+that uses it.
+
+SCOPE FOR v0.1: single-folder only. A project is one flat folder
+containing `main.bs` plus any number of sibling `.bs` files. There are
+no subfolders/packages and no dotted import paths in v0.1. This keeps
+the mental model dead simple for learners: "any file next to main.bs
+can be imported by name." Nested folder-based packages (as originally
+sketched) are explicitly deferred — see 6.6.
+
+### 6.2 Import Syntax
+
+BambooScript supports two import forms, modeled directly on Python's
+import statement, using bare file names (no dots, no path segments):
+
+```
+import module_name
+from module_name import function_name
+from module_name import function_name, other_function
+from module_name import function_name as alias
+```
+
+Usage inside code is Python-style dotted access when using plain
+`import`, and direct name access when using `from ... import`:
+
+```
+import panda
+panda.draw_panda(100, 100)
+
+from panda import draw_panda
+draw_panda(100, 100)
+```
+
+### 6.3 Folder Structure Convention
+
+A BambooGrove project is a single flat folder: one entry-point file
+(`main.bs` by default) plus any number of sibling `.bs` files, all in
+the same folder. No subfolders are used for organizing importable code
+in v0.1.
+
+Example project structure:
+
+```
+my_project/
+  main.bs         <- entry point, contains setup()/draw()
+  panda.bs         <- defines draw_panda(), panda_walk()
+  bamboo.bs         <- defines draw_stalk(), draw_leaf()
+  colors.bs         <- defines project-specific color helpers
+```
+
+Import statements reference the sibling file by name only:
+
+```
+import panda
+from bamboo import draw_stalk
+from colors import forest_green
+```
+
+### 6.4 Resolution Rules
+
+- Import names resolve to a `.bs` file with the same name in the same
+  project folder as `main.bs`. There is no path traversal and no
+  cross-folder lookup in v0.1 — every importable file must live
+  alongside `main.bs`.
+- The `.bs` extension is implied and must NOT be included in import
+  statements (`import panda`, not `import panda.bs`).
+- Two files cannot share the same name in a single project (the flat
+  folder is effectively a flat namespace), so this is a non-issue by
+  construction rather than something the resolver needs to
+  disambiguate.
+- Circular imports (A imports B, B imports A) should raise a clear
+  compile-time error naming both files, rather than a cryptic runtime
+  failure.
+- Since execution is 100% client-side (Section 5.2), the module
+  resolver reads files from the in-browser project file tree
+  (IndexedDB-backed), not from any server or filesystem path.
+
+### 6.5 Editor/IDE Implications
+
+- BambooGrove's file browser (Section 5.1) can remain a flat file list
+  for v0.1 — no folder-creation UI is required to support this
+  simplified import model.
+- The editor should offer "Go to definition" / autocomplete across
+  files once a project has more than one `.bs` file — stretch goal,
+  not MVP-blocking.
+- New file actions in the sidebar can suggest starter file names (e.g.,
+  "panda.bs") for new projects, to model the convention early for
+  learners.
+
+### 6.6 Deferred / Out of Scope for v0.1
+
+- Subfolders as packages, dotted import paths (`shapes.panda`), and
+  any `__init__`-equivalent marker file are explicitly OUT of scope
+  for v0.1. If a project later needs to organize dozens of files,
+  nested folder support can be revisited as a v2 module system change
+  — but it should not be built now, since it adds resolver complexity
+  the single-folder model doesn't need.
+- Whether BambooGrove should ship a small set of built-in importable
+  modules (e.g., a "panda" character module) as project starter files
+  remains an open question for the platform team, separate from the
+  import mechanism itself.
+
+## 7. Open Questions / Decisions Needed
+
+### 7.1 Naming/Scope
 
 - [ ] Confirm final platform name: BambooGrove IDE (vs. BambooGrove Studio,
       BambooGrove Editor, etc.)
 - [ ] Confirm domain availability for chosen name before public launch
 
-### 6.2 Technical
+### 7.2 Technical
 
 - [ ] Sandbox strategy: iframe vs. Web Worker vs. both, for safe script
       execution. **Current implementation note:** v0.1 runs transpiled
@@ -271,7 +470,7 @@ def draw():
       all execute in the browser. This is a firm architectural decision
       for MVP, not just a recommendation.
 
-### 6.3 Content/Teaching Integration
+### 7.3 Content/Teaching Integration
 
 - [ ] Confirm relationship between BambooGrove platform and the YouTube
       series — will videos embed live BambooGrove sketches, or use
@@ -279,7 +478,7 @@ def draw():
 - [ ] Define initial curriculum arc (first 10 videos = first 10 language
       concepts introduced, in order)
 
-## 7. Next Steps
+## 8. Next Steps
 
 1. Finalize BambooScript v0.1 grammar (formal spec, not just examples)
 2. Prototype the transpiler: BambooScript source -> JS -> canvas calls
@@ -288,3 +487,7 @@ def draw():
    work
 4. Validate the "teaching loop" — write and record one full example
    lesson (e.g., "draw a bamboo stalk using loops") end to end
+5. Implement single-folder import resolution (Section 6) once
+   single-file scripts are working end to end — the flat, no-
+   subfolder model keeps this a small addition, not a prerequisite
+   for the core execution pipeline

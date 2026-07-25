@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "../src/parser.js";
-import { transpile } from "../src/transpiler.js";
+import { transpile, transpileLibrary } from "../src/transpiler.js";
 import { BambooSyntaxError } from "../src/errors.js";
 
 function makeFakeRuntime() {
@@ -118,4 +118,184 @@ test("embeds __rt.__line markers for error mapping", () => {
   const code = transpile(parse("def draw():\n    forward(1)\n    turn(2)\n"));
   assert.match(code, /__rt\.__line = 2;/);
   assert.match(code, /__rt\.__line = 3;/);
+});
+
+// --- Top-level shared variables (spec 3.6 enabler) ---
+
+test("top-level assignments become variables shared across every function", () => {
+  const src = [
+    "clicks = 0",
+    "",
+    "def draw():",
+    "    clicks = clicks + 1",
+    "",
+    "def mousePressed():",
+    "    clicks = clicks + 10",
+    "    forward(clicks)",
+    "",
+  ].join("\n");
+  const { program, calls } = run(src);
+  program.draw();
+  program.mousePressed();
+  assert.deepEqual(calls, [["forward", 11]]); // 0 -> +1 (draw) -> +10 (mousePressed)
+});
+
+test("top-level control flow is allowed (needed for Terminal/script mode)", () => {
+  const ast = parse("if True:\n    x = 1\n");
+  assert.equal(ast.body[0].type, "If");
+});
+
+test("bare 'return' at the top level is still rejected with a friendly error", () => {
+  assert.throws(() => parse("return 1\n"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /inside a function/);
+    return true;
+  });
+});
+
+// --- p5.js-compatible layer (spec 3.6) ---
+
+test("returns optional lifecycle callbacks (mousePressed, keyPressed, ...) alongside setup/draw", () => {
+  const src = [
+    "def setup():",
+    "    background(0)",
+    "",
+    "def mousePressed():",
+    "    forward(1)",
+    "",
+  ].join("\n");
+  const { program } = run(src);
+  assert.equal(typeof program.setup, "function");
+  assert.equal(typeof program.mousePressed, "function");
+  assert.equal(program.draw, null);
+  assert.equal(program.keyPressed, null);
+});
+
+test("new p5.js-style builtins map to the matching __rt method", () => {
+  const code = transpile(parse("def draw():\n    ellipse(1, 2, 3, 4)\n    push()\n    translate(5, 6)\n    pop()\n"));
+  assert.match(code, /__rt\.ellipse\(1, 2, 3, 4\)/);
+  assert.match(code, /__rt\.push\(\)/);
+  assert.match(code, /__rt\.translate\(5, 6\)/);
+  assert.match(code, /__rt\.pop\(\)/);
+});
+
+test("PI/TWO_PI and other p5.js globals resolve through __rt", () => {
+  const code = transpile(parse("def draw():\n    rotate(PI)\n    forward(mouseX)\n    turn(width)\n"));
+  assert.match(code, /__rt\.rotate\(__rt\.PI\)/);
+  assert.match(code, /__rt\.forward\(__rt\.mouseX\)/);
+  assert.match(code, /__rt\.turn\(__rt\.width\)/);
+});
+
+// --- Terminal mode (spec 3.6): async codegen ---
+
+function makeTerminalRuntime() {
+  const calls = [];
+  const rt = {
+    __line: 0,
+    __truthy: (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)),
+    __tick() {},
+    __iter: (v) => v,
+    __andAsync: async (l, r) => { const v = await l(); return rt.__truthy(v) ? await r() : v; },
+    __orAsync: async (l, r) => { const v = await l(); return rt.__truthy(v) ? v : await r(); },
+    range(a, b, c) {
+      let s, e, st;
+      if (b === undefined) { s = 0; e = a; st = 1; } else if (c === undefined) { s = a; e = b; st = 1; } else { s = a; e = b; st = c; }
+      const out = [];
+      for (let v = s; st > 0 ? v < e : v > e; v += st) out.push(v);
+      return out;
+    },
+    print: (...a) => calls.push(["print", ...a]),
+    input: async (p) => `answered:${p}`,
+  };
+  return { rt, calls };
+}
+
+test("terminal mode emits async functions and awaits every call", () => {
+  const code = transpile(parse("def draw():\n    forward(1)\n"), { mode: "terminal" });
+  assert.match(code, /async function draw\(\)/);
+  assert.match(code, /\(await __rt\.forward\(1\)\)/);
+});
+
+test("terminal mode: top-level script runs via __ready, print/input work", async () => {
+  const src = "name = input('Name? ')\nprint('Hi ' + name)\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", "Hi answered:Name? "]]);
+});
+
+test("terminal mode: top-level for-loop declares its loop variable correctly", async () => {
+  const src = "for i in range(3):\n    print(i)\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", 0], ["print", 1], ["print", 2]]);
+});
+
+test("terminal mode: 'and'/'or' with an awaited operand still short-circuits correctly", async () => {
+  const src = "if 'Ada' == 'Ada' and input('really?') == 'yes':\n    print('special')\n";
+  const code = transpile(parse(src), { mode: "terminal" });
+  const { rt, calls } = makeTerminalRuntime();
+  rt.input = async () => "yes";
+  const program = new Function("__rt", code)(rt);
+  await program.__ready;
+  assert.deepEqual(calls, [["print", "special"]]);
+});
+
+test("canvas mode (default) is unaffected: no async/await anywhere in the output", () => {
+  const code = transpile(parse("def draw():\n    forward(1)\n    if True and False:\n        turn(1)\n"));
+  assert.doesNotMatch(code, /async/);
+  assert.doesNotMatch(code, /await/);
+});
+
+// --- Library modules (spec section 6) ---
+
+test("transpileLibrary wraps every top-level function into an IIFE namespace object", () => {
+  const code = transpileLibrary(parse("def draw_panda(x, y):\n    circle(x, y, 20)\n\ndef helper():\n    return 1\n"));
+  assert.match(code, /^\(\(\) => \{/);
+  assert.match(code, /return \{ draw_panda: .*, helper: .* \};/);
+  const rt = { circle: () => {} };
+  const ns = new Function("__rt", `return ${code};`)(rt);
+  assert.equal(typeof ns.draw_panda, "function");
+  assert.equal(typeof ns.helper, "function");
+});
+
+test("transpileLibrary does not restrict exports to the lifecycle name list", () => {
+  const code = transpileLibrary(parse("def totally_custom_name():\n    return 1\n"));
+  const ns = new Function("__rt", `return ${code};`)({});
+  assert.equal(ns.totally_custom_name(), 1);
+});
+
+// --- General attribute access / method calls (spec 3.6 Phase 2 enabler) ---
+
+test("attribute reads, .attribute = assignment, and method calls compile to plain JS", () => {
+  const code = transpile(parse("def draw():\n    v = createVector(1, 2)\n    x = v.x\n    v.x = 5\n    v.add(v)\n"));
+  assert.match(code, /x = v\.x;/);
+  assert.match(code, /v\.x = 5;/);
+  assert.match(code, /v\.add\(v\);/);
+});
+
+test("method calls are awaited in terminal mode like any other call", () => {
+  const code = transpile(parse("def draw():\n    v.add(w)\n"), { mode: "terminal" });
+  assert.match(code, /\(await v\.add\(w\)\)/);
+});
+
+test("rejects 'constructor'/'prototype' as an attribute or method name", () => {
+  assert.throws(() => transpile(parse("def draw():\n    x = v.constructor\n")), BambooSyntaxError);
+  assert.throws(() => transpile(parse("def draw():\n    v.constructor()\n")), BambooSyntaxError);
+  assert.throws(() => transpile(parse("def draw():\n    v.prototype = 1\n")), BambooSyntaxError);
+});
+
+test("end-to-end: MethodCall codegen works on real JS values (e.g. list methods)", () => {
+  const code = transpile(parse("def draw():\n    xs = [1, 2, 3]\n    xs.reverse()\n    forward(xs[0])\n"));
+  const calls = [];
+  const rt = {
+    forward: (n) => calls.push(n),
+    __index: (obj, i) => obj[i],
+  };
+  const program = new Function("__rt", code)(rt);
+  program.draw();
+  assert.deepEqual(calls, [3]);
 });

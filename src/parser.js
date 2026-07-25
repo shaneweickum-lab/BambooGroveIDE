@@ -43,10 +43,61 @@ class Parser {
     const body = [];
     this.skipNewlines();
     while (!this.at("EOF")) {
-      body.push(this.parseFunctionDef());
+      body.push(this.at("def") ? this.parseFunctionDef() : this.parseTopLevelStatement());
       this.skipNewlines();
     }
     return { type: "Program", body };
+  }
+
+  // Top-level statements do double duty: in Canvas mode they're read as
+  // variable initializers shared across every function (setup/draw/event
+  // callbacks) — the BambooScript equivalent of a Python module's global
+  // scope, or a p5.js sketch's top-of-file `let`s. In Terminal mode (spec
+  // 3.6 Terminal tab) the SAME grammar is a plain top-to-bottom script, so
+  // full control flow (if/for/while) is allowed here too. `return` still
+  // doesn't make sense outside a function in either mode. `import`/`from`
+  // (spec section 6) are only meaningful at the top level as well.
+  parseTopLevelStatement() {
+    const tok = this.peek();
+    if (tok.type === "return") {
+      throw new BambooSyntaxError(
+        "'return' can only be used inside a function.",
+        tok.line
+      );
+    }
+    if (tok.type === "import") return this.parseImport();
+    if (tok.type === "from") return this.parseFromImport();
+    return this.parseStatement();
+  }
+
+  parseImport() {
+    const tok = this.expect("import");
+    const nameTok = this.expect("NAME", "Expected a module name after 'import'.");
+    this.expect("NEWLINE", "Expected end of line.");
+    return { type: "Import", module: nameTok.value, line: tok.line };
+  }
+
+  parseFromImport() {
+    const tok = this.expect("from");
+    const moduleTok = this.expect("NAME", "Expected a module name after 'from'.");
+    this.expect("import", "Expected 'import' after the module name.");
+    const names = [this.parseImportName()];
+    while (this.at(",")) {
+      this.advance();
+      names.push(this.parseImportName());
+    }
+    this.expect("NEWLINE", "Expected end of line.");
+    return { type: "FromImport", module: moduleTok.value, names, line: tok.line };
+  }
+
+  parseImportName() {
+    const nameTok = this.expect("NAME", "Expected a name to import.");
+    let alias = null;
+    if (this.at("as")) {
+      this.advance();
+      alias = this.expect("NAME", "Expected a name after 'as'.").value;
+    }
+    return { name: nameTok.value, alias };
   }
 
   parseFunctionDef() {
@@ -90,6 +141,12 @@ class Parser {
         return this.parseFor();
       case "while":
         return this.parseWhile();
+      case "import":
+      case "from":
+        throw new BambooSyntaxError(
+          "Imports can only appear at the top of the file, not inside a function.",
+          this.peek().line
+        );
       default:
         return this.parseSimpleStatement();
     }
@@ -160,8 +217,8 @@ class Parser {
     const line = this.peek().line;
     const expr = this.parseExpr();
     if (this.at("=")) {
-      if (expr.type !== "Name" && expr.type !== "Index") {
-        throw new BambooSyntaxError("Left-hand side of '=' must be a variable or list index.", line);
+      if (expr.type !== "Name" && expr.type !== "Index" && expr.type !== "Attribute") {
+        throw new BambooSyntaxError("Left-hand side of '=' must be a variable, list index, or .attribute.", line);
       }
       this.advance();
       const value = this.parseExpr();
@@ -247,7 +304,14 @@ class Parser {
   parseTrailer() {
     let node = this.parseAtom();
     for (;;) {
-      if (this.at("(")) {
+      if (this.at(".")) {
+        // `.name` — attribute access. Used for an imported sibling file's
+        // functions (spec section 6: `panda.draw_panda()`) and for objects
+        // with their own fields/methods, like Vector (`v.x`, `v.add(...)`).
+        const dotTok = this.advance();
+        const nameTok = this.expect("NAME", "Expected a name after '.'.");
+        node = { type: "Attribute", object: node, name: nameTok.value, line: dotTok.line };
+      } else if (this.at("(")) {
         const tok = this.advance();
         const args = [];
         if (!this.at(")")) {
@@ -258,10 +322,13 @@ class Parser {
           }
         }
         this.expect(")", "Expected ')' to close the argument list.");
-        if (node.type !== "Name") {
-          throw new BambooSyntaxError("Only a plain name can be called as a function.", tok.line);
+        if (node.type === "Name") {
+          node = { type: "Call", callee: node.name, args, line: tok.line };
+        } else if (node.type === "Attribute") {
+          node = { type: "MethodCall", object: node.object, method: node.name, args, line: tok.line };
+        } else {
+          throw new BambooSyntaxError("Only a plain name or a.b(...) can be called.", tok.line);
         }
-        node = { type: "Call", callee: node.name, args, line: tok.line };
       } else if (this.at("[")) {
         const tok = this.advance();
         const index = this.parseExpr();

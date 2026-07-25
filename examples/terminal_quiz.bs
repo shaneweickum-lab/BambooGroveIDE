@@ -1,0 +1,17 @@
+# A "pure Python" style script for the Terminal tab (spec 3.6). No
+# setup()/draw() needed here — just plain top-to-bottom code using only
+# print() and input(). Switch to the Terminal tab, then press Run.
+
+print("Let's do some quick math.")
+score = 0
+a = 6
+b = 7
+answer = input("What is " + a + " x " + b + "? ")
+
+if answer == "42":
+    print("Correct!")
+    score = score + 1
+else:
+    print("Not quite - it's 42.")
+
+print("Score: " + score + "/1")

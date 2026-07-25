@@ -1,0 +1,18 @@
+# Demonstrates the module system (spec section 6). This is the "main.bs"
+# half of a two-file project — see modules_panda.bs for the sibling it
+# imports. To try it in the IDE: save this as main.bs, click the "+" chip
+# above the editor to add a project file, name it panda.bs, and paste in
+# modules_panda.bs's contents.
+
+import panda
+from panda import panda_walk as walk
+
+def setup():
+    background(253, 246, 227)
+    stroke(63, 122, 44)
+
+def draw():
+    no_loop()
+    panda.draw_panda(240, 180)
+    go_to(240, 240)
+    walk()
