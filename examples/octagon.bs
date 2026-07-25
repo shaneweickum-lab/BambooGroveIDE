@@ -1,0 +1,8 @@
+def setup():
+    background(255, 255, 255)
+
+def draw():
+    stroke(34, 139, 34)
+    for i in range(8):
+        forward(100)
+        turn(45)

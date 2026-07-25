@@ -1,0 +1,14 @@
+{
+  "name": "bamboogrove-ide",
+  "version": "0.1.0",
+  "description": "BambooGrove IDE: the web-based editor and canvas runtime for BambooScript.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node serve.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
