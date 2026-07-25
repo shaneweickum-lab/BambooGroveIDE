@@ -1,0 +1,25 @@
+# Demonstrates the p5.js color layer (spec 3.6 Phase 1): colorMode("hsb")
+# lets you pick colors by hue/saturation/brightness instead of red/green/
+# blue, so spinning a rainbow ring is just "add frameCount to the hue" -
+# no manual RGB math needed.
+
+COUNT = 24
+RADIUS = 160
+
+def setup():
+    background(15, 15, 20)
+    colorMode("hsb")
+    no_stroke()
+
+def draw():
+    background(15, 15, 20)
+    push()
+    translate(width / 2, height / 2)
+    for i in range(COUNT):
+        angle = (i / COUNT) * TWO_PI
+        hue = (i * (360 / COUNT) + frameCount) % 360
+        x = cos(angle) * RADIUS
+        y = sin(angle) * RADIUS
+        fill(hue, 80, 90)
+        circle(x, y, 26)
+    pop()

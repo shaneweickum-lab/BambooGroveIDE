@@ -1,0 +1,26 @@
+# A "pure Python" Terminal-tab script that leans on the Phase 2 data-
+# conversion builtins (spec 3.6): input() always hands back a string, so
+# float() converts what the user typed before doing real arithmetic on it,
+# and str() converts the numbers back for printing.
+
+print("Simple Terminal calculator.")
+a = float(input("First number: "))
+b = float(input("Second number: "))
+op = input("Operator (+, -, *, /): ")
+
+known = True
+if op == "+":
+    result = a + b
+elif op == "-":
+    result = a - b
+elif op == "*":
+    result = a * b
+elif op == "/":
+    result = a / b
+else:
+    known = False
+
+if known:
+    print(str(a) + " " + op + " " + str(b) + " = " + str(result))
+else:
+    print("Unknown operator: " + op)
