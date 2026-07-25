@@ -1,12 +1,25 @@
 // Shared logic between BambooRuntime (Canvas tab) and TerminalRuntime
 // (Terminal tab, spec 3.6): Python-ish truthiness/boolean-ops, the loop
-// guard, list/range helpers, and print()'s value formatting. Everything
-// here is mode-agnostic — it never touches a canvas or the DOM.
+// guard, list/range helpers, print()'s value formatting, the seedable
+// random generator, Perlin noise, vectors, and data conversion (spec 3.6
+// Phase 2). Everything here is mode-agnostic — it never touches a canvas
+// or the DOM, so all of it works the same in both Canvas and Terminal mode.
 import { BambooRuntimeError } from "./errors.js";
+import { BambooVector } from "./vector.js";
 
 const MAX_ITERATIONS_PER_CALL = 300000;
 const MAX_MS_PER_CALL = 3000;
 const MAX_RANGE_LENGTH = 1000000;
+
+const PERLIN_YWRAPB = 4;
+const PERLIN_YWRAP = 1 << PERLIN_YWRAPB;
+const PERLIN_ZWRAPB = 8;
+const PERLIN_ZWRAP = 1 << PERLIN_ZWRAPB;
+const PERLIN_SIZE = 4095;
+
+function scaledCosine(i) {
+  return 0.5 * (1.0 - Math.cos(i * Math.PI));
+}
 
 function describeType(v) {
   if (v === null || v === undefined) return "nothing";
@@ -23,6 +36,11 @@ export class RuntimeBase {
     this.__iterCount = 0;
     this.__guardStart = 0;
     this.onPrint = null;
+
+    this._prngState = null; // null = unseeded (use Math.random())
+    this._perlin = null;
+    this._perlinOctaves = 4;
+    this._perlinAmpFalloff = 0.5;
   }
 
   resetGuard() {
@@ -135,6 +153,123 @@ export class RuntimeBase {
     const out = new Array(length);
     for (let i = 0, v = start; i < length; i++, v += step) out[i] = v;
     return out;
+  }
+
+  // --- Random + Perlin noise (spec 3.6 Math > Random / Noise) ---
+
+  randomSeed(seed) {
+    this._prngState = (seed >>> 0) || 1;
+  }
+
+  _nextRandom() {
+    if (this._prngState === null) return Math.random();
+    let t = (this._prngState += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  random(a, b) {
+    if (Array.isArray(a)) return a[Math.floor(this._nextRandom() * a.length)];
+    if (a === undefined) return this._nextRandom();
+    if (b === undefined) return this._nextRandom() * a;
+    return a + this._nextRandom() * (b - a);
+  }
+
+  // Classic Perlin noise, ported from p5.js's own implementation (itself
+  // ported from Processing): a lazily-built table of random values sampled
+  // with cosine interpolation across `_perlinOctaves` octaves. Reuses the
+  // same seedable PRNG as random(), so noiseSeed() makes it repeatable too.
+  noise(x, y = 0, z = 0) {
+    if (!this._perlin) {
+      this._perlin = new Array(PERLIN_SIZE + 1);
+      for (let i = 0; i < PERLIN_SIZE + 1; i++) this._perlin[i] = this._nextRandom();
+    }
+    if (x < 0) x = -x;
+    if (y < 0) y = -y;
+    if (z < 0) z = -z;
+
+    let xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    let xf = x - xi, yf = y - yi, zf = z - zi;
+    let r = 0;
+    let ampl = 0.5;
+
+    for (let o = 0; o < this._perlinOctaves; o++) {
+      let of_ = xi + (yi << PERLIN_YWRAPB) + (zi << PERLIN_ZWRAPB);
+
+      const rxf = scaledCosine(xf);
+      const ryf = scaledCosine(yf);
+
+      let n1 = this._perlin[of_ & PERLIN_SIZE];
+      n1 += rxf * (this._perlin[(of_ + 1) & PERLIN_SIZE] - n1);
+      let n2 = this._perlin[(of_ + PERLIN_YWRAP) & PERLIN_SIZE];
+      n2 += rxf * (this._perlin[(of_ + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n2);
+      n1 += ryf * (n2 - n1);
+
+      of_ += PERLIN_ZWRAP;
+      n2 = this._perlin[of_ & PERLIN_SIZE];
+      n2 += rxf * (this._perlin[(of_ + 1) & PERLIN_SIZE] - n2);
+      let n3 = this._perlin[(of_ + PERLIN_YWRAP) & PERLIN_SIZE];
+      n3 += rxf * (this._perlin[(of_ + PERLIN_YWRAP + 1) & PERLIN_SIZE] - n3);
+      n2 += ryf * (n3 - n2);
+
+      n1 += scaledCosine(zf) * (n2 - n1);
+
+      r += n1 * ampl;
+      ampl *= this._perlinAmpFalloff;
+      xi <<= 1; xf *= 2;
+      yi <<= 1; yf *= 2;
+      zi <<= 1; zf *= 2;
+
+      if (xf >= 1.0) { xi++; xf--; }
+      if (yf >= 1.0) { yi++; yf--; }
+      if (zf >= 1.0) { zi++; zf--; }
+    }
+    return r;
+  }
+
+  noiseDetail(lod, falloff) {
+    if (lod > 0) this._perlinOctaves = lod;
+    if (falloff !== undefined && falloff > 0) this._perlinAmpFalloff = falloff;
+  }
+
+  noiseSeed(seed) {
+    this.randomSeed(seed);
+    this._perlin = null; // rebuilt lazily from the newly-seeded PRNG
+  }
+
+  // --- Vector (spec 3.6 Math > p5.Vector) ---
+
+  createVector(x = 0, y = 0, z = 0) {
+    return new BambooVector(x, y, z);
+  }
+
+  // --- Data conversion (spec 3.6 Data > Conversion) ---
+
+  int(v) {
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v === "string") {
+      const n = parseInt(v, 10);
+      return Number.isNaN(n) ? 0 : n;
+    }
+    return Math.trunc(v);
+  }
+
+  float(v) {
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v === "string") {
+      const n = parseFloat(v);
+      return Number.isNaN(n) ? 0 : n;
+    }
+    return Number(v);
+  }
+
+  str(v) {
+    return this._stringify(v);
+  }
+
+  boolean(v) {
+    return this.__truthy(v);
   }
 
   // --- print() (spec 3.6 Terminal tab; also usable from Canvas mode as a

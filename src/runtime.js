@@ -12,6 +12,7 @@
 // instead of named constants, to avoid inventing a large constants surface
 // beyond the handful (PI, TWO_PI, ...) the spec actually calls for.
 import { RuntimeBase } from "./runtime-base.js";
+import { BambooRuntimeError } from "./errors.js";
 
 const CURSOR_ALIASES = {
   ARROW: "default", CROSS: "crosshair", HAND: "pointer",
@@ -71,6 +72,7 @@ export class BambooRuntime extends RuntimeBase {
     this.colorModeVal = "rgb";
     this._max = [255, 255, 255, 255];
     this._styleStack = [];
+    this._shapeVertices = null;
 
     this.textSizeVal = 16;
     this.textAlignH = "left";
@@ -95,8 +97,6 @@ export class BambooRuntime extends RuntimeBase {
     this.onLoopResume = null;
     this.onRedrawRequest = null;
     this.frameRateTarget = null;
-
-    this._prngState = null; // null = unseeded (use Math.random())
 
     this._onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -360,6 +360,47 @@ export class BambooRuntime extends RuntimeBase {
   triangle(x1, y1, x2, y2, x3, y3) { this._polygon([x1, y1, x2, y2, x3, y3]); }
   quad(x1, y1, x2, y2, x3, y3, x4, y4) { this._polygon([x1, y1, x2, y2, x3, y3, x4, y4]); }
 
+  // --- Curves and custom shapes (spec 3.6 Phase 2) ---
+
+  bezier(x1, y1, x2, y2, x3, y3, x4, y4) {
+    if (!this.strokeOn) return;
+    const ctx = this.ctx;
+    this._applyStroke();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(x2, y2, x3, y3, x4, y4);
+    ctx.stroke();
+  }
+
+  beginShape() {
+    this._shapeVertices = [];
+  }
+
+  vertex(x, y) {
+    if (!this._shapeVertices) {
+      throw new BambooRuntimeError("vertex() can only be called between beginShape() and endShape().", this.__line);
+    }
+    this._shapeVertices.push([x, y]);
+  }
+
+  // mode: "close" closes the shape back to its first vertex (a filled
+  // polygon); anything else (the default) leaves it open, like a polyline.
+  endShape(mode) {
+    const verts = this._shapeVertices;
+    if (!verts) {
+      throw new BambooRuntimeError("endShape() needs a matching beginShape() first.", this.__line);
+    }
+    this._shapeVertices = null;
+    if (verts.length === 0) return;
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(verts[0][0], verts[0][1]);
+    for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i][0], verts[i][1]);
+    if (mode === "close") ctx.closePath();
+    if (this.fillOn) { ctx.fillStyle = this.fillColor; ctx.fill(); }
+    if (this.strokeOn) { this._applyStroke(); ctx.stroke(); }
+  }
+
   point(x, y) {
     if (!this.strokeOn) return;
     const ctx = this.ctx;
@@ -526,24 +567,5 @@ export class BambooRuntime extends RuntimeBase {
   min(...args) {
     const values = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
     return Math.min(...values);
-  }
-
-  randomSeed(seed) {
-    this._prngState = (seed >>> 0) || 1;
-  }
-
-  _nextRandom() {
-    if (this._prngState === null) return Math.random();
-    let t = (this._prngState += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  }
-
-  random(a, b) {
-    if (Array.isArray(a)) return a[Math.floor(this._nextRandom() * a.length)];
-    if (a === undefined) return this._nextRandom();
-    if (b === undefined) return this._nextRandom() * a;
-    return a + this._nextRandom() * (b - a);
   }
 }

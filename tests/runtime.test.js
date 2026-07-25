@@ -8,7 +8,7 @@ function fakeCanvas() {
     fillRect() {}, strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
     stroke() {}, fill() {}, arc() {}, fillText() {}, ellipse() {}, save() {},
     restore() {}, setTransform() {}, clearRect() {}, translate() {}, rotate() {},
-    scale() {}, closePath() {},
+    scale() {}, closePath() {}, bezierCurveTo() {},
   };
   return {
     width: 400, height: 400, style: {},
@@ -304,4 +304,73 @@ test("pmouseX/pmouseY hold the mouse position from before the latest move", () =
   move({ clientX: 30, clientY: 40 });
   assert.equal(rt.mouseX, 30);
   assert.equal(rt.pmouseX, 10);
+});
+
+// --- p5.js-compatible layer Phase 2 (spec 3.6) ---
+
+test("createVector returns a usable BambooVector", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  const v = rt.createVector(3, 4);
+  assert.equal(v.mag(), 5);
+});
+
+test("noiseSeed() makes noise() deterministic and repeatable", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  rt.noiseSeed(7);
+  const first = [rt.noise(0.1), rt.noise(0.2, 0.3), rt.noise(1, 2, 3)];
+  rt.noiseSeed(7);
+  const second = [rt.noise(0.1), rt.noise(0.2, 0.3), rt.noise(1, 2, 3)];
+  assert.deepEqual(first, second);
+});
+
+test("noise() output stays within [0, 1] for typical inputs", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  rt.noiseSeed(1);
+  for (let i = 0; i < 50; i++) {
+    const n = rt.noise(i * 0.1, i * 0.05);
+    assert.ok(n >= 0 && n <= 1, `noise(${i * 0.1}) = ${n} out of range`);
+  }
+});
+
+test("noiseDetail() changes the octave count used", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt._perlinOctaves, 4);
+  rt.noiseDetail(2, 0.25);
+  assert.equal(rt._perlinOctaves, 2);
+  assert.equal(rt._perlinAmpFalloff, 0.25);
+});
+
+test("data conversion: int/float/str/boolean", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.int("42"), 42);
+  assert.equal(rt.int(3.9), 3);
+  assert.equal(rt.int(true), 1);
+  assert.equal(rt.int("not a number"), 0);
+  assert.equal(rt.float("3.14"), 3.14);
+  assert.equal(rt.str(true), "True");
+  assert.equal(rt.str([1, "a"]), "[1, 'a']");
+  assert.equal(rt.boolean(0), false);
+  assert.equal(rt.boolean([1]), true);
+});
+
+test("bezier() strokes without throwing, and respects no_stroke()", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.doesNotThrow(() => rt.bezier(0, 0, 10, 10, 20, 10, 30, 0));
+  rt.no_stroke();
+  assert.doesNotThrow(() => rt.bezier(0, 0, 10, 10, 20, 10, 30, 0));
+});
+
+test("beginShape/vertex/endShape build and draw a custom polygon", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  rt.beginShape();
+  rt.vertex(0, 0);
+  rt.vertex(10, 0);
+  rt.vertex(10, 10);
+  assert.doesNotThrow(() => rt.endShape("close"));
+});
+
+test("vertex() outside beginShape()/endShape() throws a friendly error", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.vertex(0, 0), BambooRuntimeError);
+  assert.throws(() => rt.endShape(), BambooRuntimeError);
 });

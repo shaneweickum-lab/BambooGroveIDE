@@ -248,11 +248,20 @@ implements a deliberate subset, phased by priority:
 **PHASE 2 (post-MVP):**
 
 - Shape > Curves and Custom Shapes: `bezier()`, `beginShape()`,
-  `vertex()`, `endShape()`
-- Image: `loadImage()`, `image()`, `tint()`, `noTint()`
-- Math > Noise: `noise()`, `noiseDetail()`, `noiseSeed()`
-- Math > p5.Vector: `createVector()` and vector math operations
-- Data > Conversion: `int()`, `float()`, `str()`, `boolean()`
+  `vertex()`, `endShape()` — **implemented**
+- Math > Noise: `noise()`, `noiseDetail()`, `noiseSeed()` —
+  **implemented**
+- Math > p5.Vector: `createVector()` and vector math operations —
+  **implemented** (mutating instance methods that return the vector
+  for chaining, matching real p5.js; no operator overloading since
+  JS doesn't support it)
+- Data > Conversion: `int()`, `float()`, `str()`, `boolean()` —
+  **implemented**
+- Image: `loadImage()`, `image()`, `tint()`, `noTint()` — **deferred**.
+  This needs asset-upload/hosting infrastructure (there's no file
+  storage in a static-only, localStorage-backed IDE yet) and was
+  judged out of scope for this pass. Revisit once the storage layer
+  supports binary assets.
 
 **OUT OF SCOPE** (not planned — conflicts with "visual-only,
 client-side, teaching tool" design boundaries):

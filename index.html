@@ -197,6 +197,46 @@
               </dl>
               <p class="reference-note">Use the file chips above the editor to add and switch between files in the same project.</p>
             </section>
+
+            <section>
+              <h3>Curves &amp; custom shapes</h3>
+              <dl>
+                <dt><code>bezier(x1,y1, x2,y2, x3,y3, x4,y4)</code></dt><dd>A curved line through two control points.</dd>
+                <dt><code>beginShape() / vertex(x, y) / endShape(mode)</code></dt><dd>Build a custom polygon from any number of points. Pass <code>"close"</code> to <code>endShape</code> to close it into a filled shape.</dd>
+              </dl>
+            </section>
+
+            <section>
+              <h3>Noise</h3>
+              <dl>
+                <dt><code>noise(x, y, z)</code></dt><dd>Smooth pseudo-random value (Perlin noise), unlike <code>random()</code> which jumps around.</dd>
+                <dt><code>noiseDetail(octaves, falloff)</code></dt><dd>Adjust noise's texture — more octaves add finer detail.</dd>
+                <dt><code>noiseSeed(n)</code></dt><dd>Make <code>noise()</code> repeatable.</dd>
+              </dl>
+            </section>
+
+            <section>
+              <h3>Vector</h3>
+              <dl>
+                <dt><code>createVector(x, y, z)</code></dt><dd>A position/direction with <code>.x</code>/<code>.y</code>/<code>.z</code>.</dd>
+                <dt><code>v.add(other) / v.sub(other)</code></dt><dd>Add/subtract another vector, in place.</dd>
+                <dt><code>v.mult(n) / v.div(n)</code></dt><dd>Scale by a number, in place.</dd>
+                <dt><code>v.mag() / v.normalize() / v.limit(max)</code></dt><dd>Length; scale to length 1; cap the length.</dd>
+                <dt><code>v.heading() / v.rotate(angle)</code></dt><dd>Direction in radians; rotate in place.</dd>
+                <dt><code>v.dist(other) / v.dot(other)</code></dt><dd>Distance to / dot product with another vector.</dd>
+                <dt><code>v.copy()</code></dt><dd>An independent duplicate (methods mutate the original otherwise).</dd>
+              </dl>
+              <p class="reference-note">There's no <code>+</code>/<code>-</code> for vectors (JS has no operator overloading) — use the methods above, the same way real p5.js sketches do.</p>
+            </section>
+
+            <section>
+              <h3>Data conversion</h3>
+              <dl>
+                <dt><code>int(v) / float(v)</code></dt><dd>Convert a string or boolean to a number.</dd>
+                <dt><code>str(v)</code></dt><dd>Convert anything to text (numbers, <code>True</code>/<code>False</code>, lists).</dd>
+                <dt><code>boolean(v)</code></dt><dd>Convert to <code>True</code>/<code>False</code> using the same rules as <code>if</code>.</dd>
+              </dl>
+            </section>
           </div>
         </div>
       </section>

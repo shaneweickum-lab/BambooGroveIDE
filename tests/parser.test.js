@@ -86,12 +86,13 @@ test("parses 'from name import a, b as c'", () => {
   ]);
 });
 
-test("parses module_name.function_name() as a Call with a module field", () => {
+test("parses module_name.function_name() as a MethodCall", () => {
   const ast = parse("import panda\n\ndef draw():\n    panda.draw_panda(1, 2)\n");
   const call = ast.body[1].body[0].value;
-  assert.equal(call.type, "Call");
-  assert.equal(call.module, "panda");
-  assert.equal(call.callee, "draw_panda");
+  assert.equal(call.type, "MethodCall");
+  assert.equal(call.object.type, "Name");
+  assert.equal(call.object.name, "panda");
+  assert.equal(call.method, "draw_panda");
   assert.equal(call.args.length, 2);
 });
 
@@ -103,8 +104,31 @@ test("rejects import/from inside a function body", () => {
   });
 });
 
-test("rejects '.' after anything other than a plain name", () => {
-  assert.throws(() => parse("import panda\n\ndef draw():\n    panda.draw_panda(1, 2).oops\n"), BambooSyntaxError);
+// --- General attribute access (spec 3.6 Phase 2 enabler, e.g. Vector's v.x) ---
+
+test("parses .attribute reads and chained .attribute.method() calls", () => {
+  const ast = parse("def draw():\n    x = v.x\n    v.copy().x\n");
+  const readStmt = ast.body[0].body[0];
+  assert.equal(readStmt.value.type, "Attribute");
+  assert.equal(readStmt.value.object.name, "v");
+  assert.equal(readStmt.value.name, "x");
+
+  const chainStmt = ast.body[0].body[1];
+  assert.equal(chainStmt.value.type, "Attribute");
+  assert.equal(chainStmt.value.object.type, "MethodCall");
+  assert.equal(chainStmt.value.object.method, "copy");
+});
+
+test("parses .attribute = value as an assignment target", () => {
+  const ast = parse("def draw():\n    v.x = 5\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.type, "Assign");
+  assert.equal(assign.target.type, "Attribute");
+  assert.equal(assign.target.name, "x");
+});
+
+test("rejects calling the result of a call/method-call a second time", () => {
+  assert.throws(() => parse("def f():\n    g()()\n"), BambooSyntaxError);
 });
 
 // --- Terminal/script mode enabler: top-level control flow ---

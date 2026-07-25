@@ -1,0 +1,36 @@
+# Demonstrates spec 3.6 Phase 2: a Vector-based position nudged by Perlin
+# noise (smoother than random()), plus a bezier curve and a custom shape
+# built from beginShape()/vertex()/endShape().
+
+pos = createVector(240, 240)
+t = 0
+
+def setup():
+    background(20, 20, 30)
+
+def draw():
+    t = t + 0.01
+    dx = (noise(t) - 0.5) * 4
+    dy = (noise(t + 100) - 0.5) * 4
+    pos.add(dx, dy)
+    pos.x = constrain(pos.x, 10, 470)
+    pos.y = constrain(pos.y, 10, 470)
+
+    background(20, 20, 30)
+
+    stroke(80, 200, 120)
+    no_fill()
+    bezier(40, 440, 160, 340, 320, 340, 440, 440)
+
+    no_stroke()
+    fill(220, 160, 60)
+    beginShape()
+    vertex(400, 60)
+    vertex(440, 100)
+    vertex(400, 140)
+    vertex(360, 100)
+    endShape("close")
+
+    no_stroke()
+    fill(120, 200, 255)
+    circle(pos.x, pos.y, 16)

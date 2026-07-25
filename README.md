@@ -79,6 +79,22 @@ npm test
 - **Reference tab**: a static quick-reference panel covering syntax, the
   full stdlib, and both execution modes — no need to leave the IDE to
   look something up.
+- **General attribute/method access** (`src/parser.js`, `src/transpiler.js`):
+  `.` works uniformly for any object — `panda.draw_panda()` (a module
+  call), `v.x` (a property read), `v.add(1, 2)` (a method call) — and
+  chains freely (`a.b.c()`). `constructor`/`prototype`/`__proto__` are
+  rejected as attribute/method names so user code can't reach the JS
+  `Function` constructor and escape the loop-guard.
+- **p5.js Phase 2 layer** (spec 3.6): custom shapes (`bezier()`,
+  `beginShape()`/`vertex()`/`endShape()`), Perlin noise (`noise()`,
+  `noiseDetail()`, `noiseSeed()`), `createVector()` and p5.Vector-style
+  vector math (`add`/`sub`/`mult`/`div`/`mag`/`normalize`/`limit`/
+  `heading`/`rotate`/`dist`/`dot`/`cross`/`copy`/`set`/`array`/`equals`
+  — mutating methods that return the vector for chaining, matching real
+  p5.js; no operator overloading since JS doesn't support it), and data
+  conversion (`int()`, `float()`, `str()`, `boolean()`). Image
+  (`loadImage()`/`image()`/`tint()`/`noTint()`) was **not** implemented —
+  see "Known limitations" below.
 - **Sandbox** (`src/sandbox.js`): compiles and runs a sketch in either
   mode, drives the `setup()`/`draw()` `requestAnimationFrame` loop (with
   `frameRate()` throttling) in Canvas mode, dispatches the event
@@ -104,8 +120,11 @@ npm test
   bamboo stalk using loops" lesson from spec section 7 — 
   `p5_style_orbit.bs` (`push`/`translate`/`rotate`, a top-level shared
   variable, `mousePressed()`), `terminal_quiz.bs` (Terminal-tab
-  print/input), and `modules_main.bs` + `modules_panda.bs` (a two-file
-  project — see the comment in `modules_main.bs` for how to load both).
+  print/input), `modules_main.bs` + `modules_panda.bs` (a two-file
+  project — see the comment in `modules_main.bs` for how to load both),
+  and `phase2_demo.bs` (a `createVector()` position nudged by `noise()`,
+  a `bezier()` curve, and a custom `beginShape()`/`vertex()`/`endShape()`
+  shape).
 
 ## Project layout
 
@@ -166,3 +185,8 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   of named constants like `p5.CENTER`, to avoid inventing a large
   constants surface beyond the handful (`PI`, `TWO_PI`, ...) the spec
   calls for.
+- p5.js Phase 2's Image sub-category (`loadImage()`, `image()`,
+  `tint()`, `noTint()`) is **not implemented**. It needs asset
+  upload/hosting, and the current storage layer only persists `.bs`
+  source text to `localStorage` — no binary asset support yet. Revisit
+  once that's in place.

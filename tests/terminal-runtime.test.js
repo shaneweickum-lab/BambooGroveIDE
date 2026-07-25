@@ -78,3 +78,39 @@ test("inherits the shared guard/truthiness logic from RuntimeBase", () => {
     for (let i = 0; i < 400000; i++) rt.__tick(1);
   }, BambooRuntimeError);
 });
+
+// --- Phase 2 (spec 3.6): pure-computation builtins work in Terminal mode too ---
+
+test("random/randomSeed work in Terminal mode (not canvas-only)", () => {
+  const rt = new TerminalRuntime();
+  rt.randomSeed(1);
+  assert.doesNotThrow(() => rt.random());
+});
+
+test("noise/noiseDetail/noiseSeed/createVector work in Terminal mode", () => {
+  const rt = new TerminalRuntime();
+  assert.equal(typeof rt.noise(0.5), "number");
+  assert.doesNotThrow(() => rt.noiseDetail(2, 0.3));
+  assert.doesNotThrow(() => rt.noiseSeed(1));
+  const v = rt.createVector(3, 4);
+  assert.equal(v.mag(), 5);
+});
+
+test("int/float/str/boolean work in Terminal mode", () => {
+  const rt = new TerminalRuntime();
+  assert.equal(rt.int("5"), 5);
+  assert.equal(rt.float("2.5"), 2.5);
+  assert.equal(rt.str(true), "True");
+  assert.equal(rt.boolean(1), true);
+});
+
+test("bezier/beginShape/vertex/endShape are still Canvas-only stubs", () => {
+  const rt = new TerminalRuntime();
+  for (const name of ["bezier", "beginShape", "vertex", "endShape"]) {
+    assert.throws(() => rt[name](), (err) => {
+      assert.ok(err instanceof BambooRuntimeError);
+      assert.match(err.message, /Terminal mode/);
+      return true;
+    });
+  }
+});

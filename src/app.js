@@ -156,6 +156,14 @@ const BUILTINS = new Set([
   "PI", "TWO_PI", "HALF_PI", "QUARTER_PI", "DEGREES", "RADIANS",
   // Terminal tab (spec 3.6)
   "print", "input",
+  // p5.js-compatible layer Phase 2 (spec 3.6)
+  "bezier", "beginShape", "vertex", "endShape",
+  "noise", "noiseDetail", "noiseSeed", "createVector",
+  "int", "float", "str", "boolean",
+  // Vector instance methods (called as v.add(...), etc.)
+  "add", "sub", "mult", "div", "mag", "magSq", "normalize", "limit",
+  "setMag", "heading", "rotate", "dist", "dot", "cross", "copy", "set",
+  "array", "equals",
 ]);
 
 const TOKEN_RE = /(#.*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b\d+\.?\d*\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)/g;

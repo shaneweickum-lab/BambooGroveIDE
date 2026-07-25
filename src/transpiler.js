@@ -91,6 +91,21 @@ function assertValidIdentifier(name, line) {
   }
 }
 
+// Names attribute access (.name / .method(...)) refuses on top of the usual
+// identifier rules. `constructor`/`prototype` specifically block the
+// classic `x.constructor.constructor("...")` escape to the Function
+// constructor — the one thing that would actually undermine the loop-guard
+// promise (spec 4.2), since code reached that way never passes through our
+// own __tick() codegen.
+const RESERVED_PROPERTY_NAMES = new Set(["constructor", "prototype", "__proto__"]);
+
+function assertValidPropertyName(name, line) {
+  assertValidIdentifier(name, line);
+  if (RESERVED_PROPERTY_NAMES.has(name)) {
+    throw new BambooSyntaxError(`'${name}' isn't a usable attribute or method name.`, line);
+  }
+}
+
 class Transpiler {
   constructor(mode) {
     this.tempCounter = 0;
@@ -221,6 +236,12 @@ class Transpiler {
     if (node.target.type === "Name") {
       return `${node.target.name} = ${value};`;
     }
+    if (node.target.type === "Attribute") {
+      // obj.attr = value — e.g. a Vector's v.x = 5 (spec 3.6 Phase 2)
+      assertValidPropertyName(node.target.name, node.line);
+      const obj = this.genExpr(node.target.object);
+      return `${obj}.${node.target.name} = ${value};`;
+    }
     // Index target: obj[idx] = value
     const obj = this.genExpr(node.target.object);
     const idx = this.genExpr(node.target.index);
@@ -287,8 +308,13 @@ class Transpiler {
         return `[${node.elements.map((e) => this.genExpr(e)).join(", ")}]`;
       case "Index":
         return `__rt.__index(${this.genExpr(node.object)}, ${this.genExpr(node.index)}, ${node.line})`;
+      case "Attribute":
+        assertValidPropertyName(node.name, node.line);
+        return `${this.genExpr(node.object)}.${node.name}`;
       case "Call":
         return this.genCall(node);
+      case "MethodCall":
+        return this.genMethodCall(node);
       case "BinOp":
         return `(${this.genExpr(node.left)} ${BINOP_JS[node.op]} ${this.genExpr(node.right)})`;
       case "Compare":
@@ -312,18 +338,25 @@ class Transpiler {
   genCall(node) {
     const args = node.args.map((a) => this.genExpr(a)).join(", ");
     let callExpr;
-    if (node.module) {
-      // module_name.function_name() — an imported sibling file's function
-      // (spec section 6). Never a builtin, so no RUNTIME_BUILTINS lookup.
-      assertValidIdentifier(node.module, node.line);
-      assertValidIdentifier(node.callee, node.line);
-      callExpr = `${node.module}.${node.callee}(${args})`;
-    } else if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
+    if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
       callExpr = `__rt.${RUNTIME_BUILTINS[node.callee]}(${args})`;
     } else {
       assertValidIdentifier(node.callee, node.line);
       callExpr = `${node.callee}(${args})`;
     }
+    return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
+  }
+
+  // obj.method(args) — an imported sibling file's function (spec section
+  // 6: panda.draw_panda()) or a method on an object value like Vector
+  // (spec 3.6 Phase 2: v.add(other)). Never a builtin itself, so no
+  // RUNTIME_BUILTINS lookup — whatever `obj` evaluates to just gets its
+  // own `.method(...)` called directly.
+  genMethodCall(node) {
+    assertValidPropertyName(node.method, node.line);
+    const obj = this.genExpr(node.object);
+    const args = node.args.map((a) => this.genExpr(a)).join(", ");
+    const callExpr = `${obj}.${node.method}(${args})`;
     return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
   }
 }
@@ -430,13 +463,41 @@ const RUNTIME_BUILTINS = {
   // only does anything useful in Terminal mode (see runtime.js / TerminalRuntime).
   print: "print",
   input: "input",
+
+  // p5.js-compatible layer (spec 3.6, Phase 2)
+  // Shape > Curves and Custom Shapes (canvas-only — see NON_CANVAS_BUILTINS)
+  bezier: "bezier",
+  beginShape: "beginShape",
+  vertex: "vertex",
+  endShape: "endShape",
+  // Math > Noise (works in both modes — pure computation, see runtime-base.js)
+  noise: "noise",
+  noiseDetail: "noiseDetail",
+  noiseSeed: "noiseSeed",
+  // Math > p5.Vector (works in both modes — createVector() itself doesn't
+  // touch the canvas; the Vector's own methods, e.g. v.add(), are called
+  // as plain object methods via MethodCall, not through __rt at all)
+  createVector: "createVector",
+  // Data > Conversion (works in both modes)
+  int: "int",
+  float: "float",
+  str: "str",
+  boolean: "boolean",
 };
 
-// Builtin names that only make sense in Canvas mode — used by
-// TerminalRuntime to stub them out with a friendly redirect error instead
-// of a confusing "not a function" crash.
+// Builtins that work the same with no canvas at all — everything else in
+// RUNTIME_BUILTINS is Canvas-mode only, and TerminalRuntime stubs it out
+// with a friendly redirect error instead of a confusing "not a function"
+// crash (see CANVAS_ONLY_BUILTIN_NAMES below).
+const NON_CANVAS_BUILTINS = new Set([
+  "range", "print", "input",
+  "random", "randomSeed",
+  "noise", "noiseDetail", "noiseSeed", "createVector",
+  "int", "float", "str", "boolean",
+]);
+
 export const CANVAS_ONLY_BUILTIN_NAMES = Object.keys(RUNTIME_BUILTINS).filter(
-  (name) => name !== "range" && name !== "print" && name !== "input"
+  (name) => !NON_CANVAS_BUILTINS.has(name)
 );
 
 function collectAssignedNames(stmts, into) {

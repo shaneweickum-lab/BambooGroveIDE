@@ -217,8 +217,8 @@ class Parser {
     const line = this.peek().line;
     const expr = this.parseExpr();
     if (this.at("=")) {
-      if (expr.type !== "Name" && expr.type !== "Index") {
-        throw new BambooSyntaxError("Left-hand side of '=' must be a variable or list index.", line);
+      if (expr.type !== "Name" && expr.type !== "Index" && expr.type !== "Attribute") {
+        throw new BambooSyntaxError("Left-hand side of '=' must be a variable, list index, or .attribute.", line);
       }
       this.advance();
       const value = this.parseExpr();
@@ -305,19 +305,12 @@ class Parser {
     let node = this.parseAtom();
     for (;;) {
       if (this.at(".")) {
-        // `module_name.function_name` — the only use of '.' in BambooScript,
-        // for calling an imported sibling file's function (spec section 6).
-        // There's no general object/attribute system, so this only ever
-        // makes sense directly on a plain name, and only as a call target.
+        // `.name` — attribute access. Used for an imported sibling file's
+        // functions (spec section 6: `panda.draw_panda()`) and for objects
+        // with their own fields/methods, like Vector (`v.x`, `v.add(...)`).
         const dotTok = this.advance();
         const nameTok = this.expect("NAME", "Expected a name after '.'.");
-        if (node.type !== "Name") {
-          throw new BambooSyntaxError(
-            "'.' can only follow a plain name, as in module_name.function_name().",
-            dotTok.line
-          );
-        }
-        node = { type: "ModuleAttr", module: node.name, name: nameTok.value, line: dotTok.line };
+        node = { type: "Attribute", object: node, name: nameTok.value, line: dotTok.line };
       } else if (this.at("(")) {
         const tok = this.advance();
         const args = [];
@@ -331,10 +324,10 @@ class Parser {
         this.expect(")", "Expected ')' to close the argument list.");
         if (node.type === "Name") {
           node = { type: "Call", callee: node.name, args, line: tok.line };
-        } else if (node.type === "ModuleAttr") {
-          node = { type: "Call", module: node.module, callee: node.name, args, line: tok.line };
+        } else if (node.type === "Attribute") {
+          node = { type: "MethodCall", object: node.object, method: node.name, args, line: tok.line };
         } else {
-          throw new BambooSyntaxError("Only a plain name or module_name.function_name can be called.", tok.line);
+          throw new BambooSyntaxError("Only a plain name or a.b(...) can be called.", tok.line);
         }
       } else if (this.at("[")) {
         const tok = this.advance();

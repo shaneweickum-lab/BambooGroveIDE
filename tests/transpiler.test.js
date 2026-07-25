@@ -267,3 +267,35 @@ test("transpileLibrary does not restrict exports to the lifecycle name list", ()
   const ns = new Function("__rt", `return ${code};`)({});
   assert.equal(ns.totally_custom_name(), 1);
 });
+
+// --- General attribute access / method calls (spec 3.6 Phase 2 enabler) ---
+
+test("attribute reads, .attribute = assignment, and method calls compile to plain JS", () => {
+  const code = transpile(parse("def draw():\n    v = createVector(1, 2)\n    x = v.x\n    v.x = 5\n    v.add(v)\n"));
+  assert.match(code, /x = v\.x;/);
+  assert.match(code, /v\.x = 5;/);
+  assert.match(code, /v\.add\(v\);/);
+});
+
+test("method calls are awaited in terminal mode like any other call", () => {
+  const code = transpile(parse("def draw():\n    v.add(w)\n"), { mode: "terminal" });
+  assert.match(code, /\(await v\.add\(w\)\)/);
+});
+
+test("rejects 'constructor'/'prototype' as an attribute or method name", () => {
+  assert.throws(() => transpile(parse("def draw():\n    x = v.constructor\n")), BambooSyntaxError);
+  assert.throws(() => transpile(parse("def draw():\n    v.constructor()\n")), BambooSyntaxError);
+  assert.throws(() => transpile(parse("def draw():\n    v.prototype = 1\n")), BambooSyntaxError);
+});
+
+test("end-to-end: MethodCall codegen works on real JS values (e.g. list methods)", () => {
+  const code = transpile(parse("def draw():\n    xs = [1, 2, 3]\n    xs.reverse()\n    forward(xs[0])\n"));
+  const calls = [];
+  const rt = {
+    forward: (n) => calls.push(n),
+    __index: (obj, i) => obj[i],
+  };
+  const program = new Function("__rt", code)(rt);
+  program.draw();
+  assert.deepEqual(calls, [3]);
+});
