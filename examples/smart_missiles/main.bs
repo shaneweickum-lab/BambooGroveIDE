@@ -2,6 +2,8 @@
 # that steer toward a moving target using p5.Vector math (createVector,
 # add/sub/normalize/limit - Phase 2) instead of snapping straight at it -
 # the same "seek" steering behavior from Daniel Shiffman's Nature of Code.
+# The on-screen telemetry line also demos f-strings: f"...{expr:.1f}..."
+# formats the target's live coordinates to one decimal place.
 #
 # Built as a two-file project (spec section 6) - see missile.bs for the
 # steering/drawing helpers this file imports. To try it in the IDE: save
@@ -41,3 +43,7 @@ def draw():
         rgb = colors[i]
         missile.steer_toward(pos, vel, target_x, target_y, MAX_SPEED, MAX_FORCE)
         missile.draw_missile(pos, vel, rgb[0], rgb[1], rgb[2])
+
+    fill(230, 230, 220)
+    textSize(14)
+    text(f"target: ({target_x:.1f}, {target_y:.1f})  missiles: {NUM_MISSILES}", 14, 24)

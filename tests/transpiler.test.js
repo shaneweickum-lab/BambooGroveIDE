@@ -17,6 +17,16 @@ function makeFakeRuntime() {
     __iter(v) { return v; },
     __index(obj, i) { return obj[i < 0 ? obj.length + i : i]; },
     __setIndex(obj, i, v) { obj[i] = v; return v; },
+    __fstr(v, spec) {
+      if (spec == null) {
+        if (v === null || v === undefined) return "None";
+        if (typeof v === "boolean") return v ? "True" : "False";
+        return String(v);
+      }
+      const m = /^\.(\d+)f$/.exec(spec);
+      if (m) return v.toFixed(Number(m[1]));
+      throw new Error(`bad f-string spec ${spec}`);
+    },
     range(a, b, c) {
       let start, stop, step;
       if (b === undefined) { start = 0; stop = a; step = 1; }
@@ -298,4 +308,28 @@ test("end-to-end: MethodCall codegen works on real JS values (e.g. list methods)
   const program = new Function("__rt", code)(rt);
   program.draw();
   assert.deepEqual(calls, [3]);
+});
+
+// --- f-strings ---
+
+test("f-string parts concatenate through __rt.__fstr", () => {
+  const code = transpile(parse('def draw():\n    forward(f"hi {name}!")\n'));
+  assert.match(code, /__rt\.__fstr\(name, null, \d+\)/);
+});
+
+test("f-strings interpolate expressions using the runtime's __fstr", () => {
+  const { program, calls } = run('def draw():\n    n = "Bo"\n    forward(f"hi {n}, total {1 + 2}")\n');
+  program.draw();
+  assert.deepEqual(calls, [["forward", "hi Bo, total 3"]]);
+});
+
+test("f-string format spec formats a number to fixed decimals", () => {
+  const { program, calls } = run('def draw():\n    forward(f"{3.14159:.2f}")\n');
+  program.draw();
+  assert.deepEqual(calls, [["forward", "3.14"]]);
+});
+
+test("a call inside an f-string expression is still awaited in terminal mode", () => {
+  const code = transpile(parse('def draw():\n    x = f"{g()}"\n'), { mode: "terminal" });
+  assert.match(code, /__rt\.__fstr\(\(await g\(\)\), null, \d+\)/);
 });

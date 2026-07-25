@@ -350,6 +350,15 @@ class Parser {
       case "STRING":
         this.advance();
         return { type: "Str", value: tok.value, line: tok.line };
+      case "FSTRING": {
+        this.advance();
+        const parts = tok.value.map((part) =>
+          part.type === "text"
+            ? { type: "text", value: part.value }
+            : { type: "expr", expr: this.parseFStringExpr(part.source, part.line), spec: part.spec }
+        );
+        return { type: "FString", parts, line: tok.line };
+      }
       case "True":
         this.advance();
         return { type: "BoolLiteral", value: true, line: tok.line };
@@ -384,6 +393,28 @@ class Parser {
           tok.line
         );
     }
+  }
+
+  // An f-string's `{...}` holds a nested BambooScript expression — tokenize
+  // and parse that fragment on its own, then make sure nothing but the
+  // implicit trailing NEWLINE/EOF is left over (catches things like
+  // `{1 2}` that parse a prefix and silently ignore the rest).
+  parseFStringExpr(source, line) {
+    let expr;
+    try {
+      const innerTokens = tokenize(source);
+      const innerParser = new Parser(innerTokens);
+      expr = innerParser.parseExpr();
+      if (!(innerParser.at("NEWLINE") && innerParser.peek(1).type === "EOF")) {
+        throw new BambooSyntaxError("unexpected extra content.", line);
+      }
+    } catch (err) {
+      throw new BambooSyntaxError(
+        `Invalid expression inside f-string '{${source}}': ${err.message}`,
+        line
+      );
+    }
+    return expr;
   }
 }
 

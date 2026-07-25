@@ -104,6 +104,12 @@ test("int/float/str/boolean work in Terminal mode", () => {
   assert.equal(rt.boolean(1), true);
 });
 
+test("f-strings (__fstr) work in Terminal mode", () => {
+  const rt = new TerminalRuntime();
+  assert.equal(rt.__fstr("hi", null), "hi");
+  assert.equal(rt.__fstr(3.14159, ".2f"), "3.14");
+});
+
 test("bezier/beginShape/vertex/endShape are still Canvas-only stubs", () => {
   const rt = new TerminalRuntime();
   for (const name of ["bezier", "beginShape", "vertex", "endShape"]) {
