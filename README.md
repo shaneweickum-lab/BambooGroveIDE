@@ -135,6 +135,22 @@ npm test
   front door — hero, feature grid, a code showcase, and a "Launch the
   IDE" call to action that links to `ide.html`. Static HTML/CSS, no JS
   framework, consistent with the "no build step" design (spec 1.2).
+- **Linter** (`src/linter.js`): a learner-focused static-analysis pass,
+  separate from the parser's fatal syntax errors — it runs on every
+  edit (debounced) and surfaces a live panel below the editor. Rules:
+  `inconsistent-naming` (a file mixing `camelCase`/`snake_case` user
+  names), `similar-names` (two distinct-but-near-identical names, e.g.
+  `total_score` vs `totalScore` — the classic typo that silently
+  creates a second variable instead of erroring), `unused-variable`
+  (assigned but never read — correctly scoped around BambooScript's
+  shared-top-level-variable model, so a global written in `draw()` and
+  read in `mousePressed()` is never a false positive), `boolean-
+  comparison` (`x == True` → `x`), `shadowed-builtin` (naming your own
+  variable/function the same as a built-in), and `line-too-long`. If
+  the source doesn't even parse, the panel shows the parser's own
+  friendly syntax error instead of running the AST-based checks.
+  Sanity-checked against every bundled example (below) for zero false
+  positives.
 - **File icon** (`assets/bamboo-script-icon.svg`, plus 16/32/64/128 PNG
   fallbacks in `assets/png/`): the `</>`-with-bamboo-stalk mark from
   spec 2.3. `assets/png/logo.png` and `assets/png/hero.png` are the
@@ -184,6 +200,7 @@ src/sandbox.js                Compile/run pipeline for both modes, error mapping
 src/storage.js                localStorage-backed file + project management
 src/app.js                    Wires the editor shell UI together (tabs, terminal, project chips)
 src/examples-manifest.js      Metadata for the in-app Examples browser (titles/paths, no source)
+src/linter.js                 Learner-focused static analysis: naming, unused vars, style
 src/errors.js                 Shared BambooSyntaxError / BambooRuntimeError
 serve.js                       Zero-dependency static file server
 docs/SPEC.md                   Full technical spec

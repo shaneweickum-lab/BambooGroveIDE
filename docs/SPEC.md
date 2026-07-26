@@ -318,6 +318,13 @@ client-side, teaching tool" design boundaries):
   - Default filename on new file: `main.bs`
 - Basic project/workspace concept: a saved sketch = one `.bs` file +
   optional metadata (title, thumbnail, last modified)
+- Live lint panel: as the learner types, a separate pass (distinct from
+  the parser's fatal syntax errors) flags likely mistakes that don't
+  stop the script from running — inconsistent naming (mixing
+  `camelCase`/`snake_case`, or two suspiciously-similar variable names
+  that might be a typo), unused variables, redundant `== True`/`==
+  False` comparisons, shadowing a built-in name, and overly long
+  lines. Each item links back to its line.
 
 ### 5.2 Storage (v0.1)
 

@@ -112,7 +112,9 @@ def evolve():
     best_i = 0
     for i in range(POP_SIZE):
         pos = rocket_pos[i]
-        fit = rocket.fitness_of(pos.x, pos.y, TARGET_X, TARGET_Y, rocket_hit_wall[i], rocket_reached[i])
+        fit = rocket.fitness_of(
+            pos.x, pos.y, TARGET_X, TARGET_Y, rocket_hit_wall[i], rocket_reached[i]
+        )
         fits.append(fit)
         total = total + fit
         if fit > fits[best_i]:
