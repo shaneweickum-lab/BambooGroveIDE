@@ -141,6 +141,8 @@ class Parser {
         return this.parseFor();
       case "while":
         return this.parseWhile();
+      case "try":
+        return this.parseTry();
       case "import":
       case "from":
         throw new BambooSyntaxError(
@@ -156,11 +158,68 @@ class Parser {
     let stmt;
     if (this.at("return")) {
       stmt = this.parseReturn();
+    } else if (this.at("raise")) {
+      stmt = this.parseRaise();
     } else {
       stmt = this.parseExprOrAssign();
     }
     this.expect("NEWLINE", "Expected end of line.");
     return stmt;
+  }
+
+  parseRaise() {
+    const raiseTok = this.expect("raise");
+    let value = null;
+    if (!this.at("NEWLINE")) {
+      value = this.parseExpr();
+    }
+    return { type: "Raise", value, line: raiseTok.line };
+  }
+
+  parseTry() {
+    const tryTok = this.expect("try");
+    this.expect(":", "Expected ':' after 'try'.");
+    const body = this.parseBlock();
+
+    const handlers = [];
+    while (this.at("except")) {
+      const exceptTok = this.advance();
+      let exceptionName = null;
+      let bindName = null;
+      if (!this.at(":")) {
+        exceptionName = this.expect("NAME", "Expected an exception type name after 'except'.").value;
+        if (this.at("as")) {
+          this.advance();
+          bindName = this.expect("NAME", "Expected a name after 'as'.").value;
+        }
+      }
+      this.expect(":", "Expected ':' after the 'except' clause.");
+      const handlerBody = this.parseBlock();
+      handlers.push({ exceptionName, bindName, body: handlerBody, line: exceptTok.line });
+    }
+
+    let orelse = null;
+    if (handlers.length > 0 && this.at("else")) {
+      this.advance();
+      this.expect(":", "Expected ':' after 'else'.");
+      orelse = this.parseBlock();
+    }
+
+    let finallyBody = null;
+    if (this.at("finally")) {
+      this.advance();
+      this.expect(":", "Expected ':' after 'finally'.");
+      finallyBody = this.parseBlock();
+    }
+
+    if (handlers.length === 0 && finallyBody === null) {
+      throw new BambooSyntaxError(
+        "A 'try' block needs at least one 'except' clause or a 'finally' clause.",
+        tryTok.line
+      );
+    }
+
+    return { type: "Try", body, handlers, orelse, finallyBody, line: tryTok.line };
   }
 
   parseIf() {
@@ -264,7 +323,16 @@ class Parser {
 
   parseComparison() {
     let left = this.parseArith();
-    if (COMPARE_OPS.has(this.peek().type)) {
+    if (this.at("in")) {
+      const tok = this.advance();
+      const right = this.parseArith();
+      left = { type: "Compare", op: "in", left, right, line: tok.line };
+    } else if (this.at("not") && this.peek(1).type === "in") {
+      const tok = this.advance();
+      this.advance(); // consume the paired 'in'
+      const right = this.parseArith();
+      left = { type: "Compare", op: "not in", left, right, line: tok.line };
+    } else if (COMPARE_OPS.has(this.peek().type)) {
       const tok = this.advance();
       const right = this.parseArith();
       left = { type: "Compare", op: tok.type, left, right, line: tok.line };
@@ -284,7 +352,7 @@ class Parser {
 
   parseTerm() {
     let left = this.parseFactor();
-    while (this.at("*") || this.at("/") || this.at("%")) {
+    while (this.at("*") || this.at("/") || this.at("//") || this.at("%")) {
       const tok = this.advance();
       const right = this.parseFactor();
       left = { type: "BinOp", op: tok.type, left, right, line: tok.line };
@@ -346,7 +414,7 @@ class Parser {
     switch (tok.type) {
       case "NUMBER":
         this.advance();
-        return { type: "Num", value: tok.value, line: tok.line };
+        return { type: "Num", value: tok.value, isFloat: tok.isFloat, line: tok.line };
       case "STRING":
         this.advance();
         return { type: "Str", value: tok.value, line: tok.line };

@@ -94,4 +94,32 @@ export const EXAMPLES = [
       { name: "rocket.bs", path: "examples/smart_missiles/rocket.bs" },
     ],
   },
+  {
+    id: "stdlib_string_demo",
+    title: "Python's string module",
+    description: "import string - ascii_letters/digits/punctuation, matching CPython's own values.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/stdlib_string_demo.bs" }],
+  },
+  {
+    id: "in_operator_demo",
+    title: "'in' / 'not in'",
+    description: "Membership tests against strings and lists, matching Python exactly.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/in_operator_demo.bs" }],
+  },
+  {
+    id: "exceptions_demo",
+    title: "try / except / raise",
+    description: "Catching ValueError/IndexError, else/finally, and raising your own errors.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/exceptions_demo.bs" }],
+  },
+  {
+    id: "numeric_model_demo",
+    title: "int vs. float, // and %",
+    description: "4/2 -> 2.0, floor division, Python's floored modulo, and ZeroDivisionError.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/numeric_model_demo.bs" }],
+  },
 ];

@@ -4,13 +4,14 @@ import { parse } from "../src/parser.js";
 import { transpile, transpileLibrary } from "../src/transpiler.js";
 import { BambooSyntaxError } from "../src/errors.js";
 import { PYTHON_STRING_METHODS_IMPL } from "../src/pystrings.js";
+import { PyFloat, unboxNum } from "../src/pynum.js";
 
 function makeFakeRuntime() {
   const calls = [];
   const rt = {
     mouseX: 5, mouseY: 6, frameCount: 2, keyPressed: "a",
     __line: 0,
-    __truthy(v) { return Array.isArray(v) ? v.length > 0 : Boolean(v); },
+    __truthy(v) { return Array.isArray(v) ? v.length > 0 : Boolean(unboxNum(v)); },
     __not(v) { return !this.__truthy(v); },
     __and(l, r) { const v = l(); return this.__truthy(v) ? r() : v; },
     __or(l, r) { const v = l(); return this.__truthy(v) ? v : r(); },
@@ -23,20 +24,44 @@ function makeFakeRuntime() {
     __mul(a, b) {
       if (typeof a === "string" && typeof b === "number") return a.repeat(b);
       if (typeof a === "number" && typeof b === "string") return b.repeat(a);
-      return a * b;
+      const result = unboxNum(a) * unboxNum(b);
+      return (a instanceof PyFloat || b instanceof PyFloat) ? new PyFloat(result) : result;
+    },
+    __mkfloat(v) { return new PyFloat(v); },
+    __neg(v) { return v instanceof PyFloat ? new PyFloat(-v.value) : -v; },
+    __truediv(a, b) { return new PyFloat(unboxNum(a) / unboxNum(b)); },
+    __floordiv(a, b) {
+      const isFloat = a instanceof PyFloat || b instanceof PyFloat;
+      const result = Math.floor(unboxNum(a) / unboxNum(b));
+      return isFloat ? new PyFloat(result) : result;
+    },
+    __mod(a, b) {
+      const av = unboxNum(a), bv = unboxNum(b);
+      const isFloat = a instanceof PyFloat || b instanceof PyFloat;
+      const result = ((av % bv) + bv) % bv;
+      return isFloat ? new PyFloat(result) : result;
+    },
+    __eq(a, b) {
+      const av = unboxNum(a), bv = unboxNum(b);
+      if (Array.isArray(av) && Array.isArray(bv)) return JSON.stringify(av) === JSON.stringify(bv);
+      return av === bv;
     },
     __strmethod(obj, name, args, line) {
       if (typeof obj === "string") return PYTHON_STRING_METHODS_IMPL[name](obj, args, line);
       return obj[name](...args);
     },
+    __contains(container, item) {
+      if (typeof container === "string") return container.includes(item);
+      return container.some((el) => el === item);
+    },
     __fstr(v, spec) {
       if (spec == null) {
         if (v === null || v === undefined) return "None";
         if (typeof v === "boolean") return v ? "True" : "False";
-        return String(v);
+        return String(unboxNum(v));
       }
       const m = /^\.(\d+)f$/.exec(spec);
-      if (m) return v.toFixed(Number(m[1]));
+      if (m) return unboxNum(v).toFixed(Number(m[1]));
       throw new Error(`bad f-string spec ${spec}`);
     },
     range(a, b, c) {
@@ -229,6 +254,7 @@ function makeTerminalRuntime() {
     print: (...a) => calls.push(["print", ...a]),
     input: async (p) => `answered:${p}`,
     __mul: (a, b) => a * b,
+    __eq: (a, b) => unboxNum(a) === unboxNum(b),
   };
   return { rt, calls };
 }
@@ -415,4 +441,33 @@ test("end-to-end: string/list repeat via *", () => {
   const { program, calls } = run('def draw():\n    forward("ab" * 3)\n    forward(4 * 5)\n');
   program.draw();
   assert.deepEqual(calls, [["forward", "ababab"], ["forward", 20]]);
+});
+
+// --- Python's 'in' / 'not in' (spec 3.2) ---
+
+test("'in' compiles to __rt.__contains(right, left, line)", () => {
+  const code = transpile(parse("def draw():\n    forward(a in b)\n"));
+  assert.match(code, /__rt\.__contains\(b, a, \d+\)/);
+});
+
+test("'not in' compiles to a negated __rt.__contains(...) call", () => {
+  const code = transpile(parse("def draw():\n    forward(a not in b)\n"));
+  assert.match(code, /!__rt\.__contains\(b, a, \d+\)/);
+});
+
+test("end-to-end: 'in'/'not in' against strings and lists", () => {
+  const { program, calls } = run(
+    'def draw():\n' +
+    '    forward("lo" in "hello")\n' +
+    '    forward("z" not in "hello")\n' +
+    '    forward(2 in [1, 2, 3])\n' +
+    '    forward(9 not in [1, 2, 3])\n'
+  );
+  program.draw();
+  assert.deepEqual(calls, [
+    ["forward", true],
+    ["forward", true],
+    ["forward", true],
+    ["forward", true],
+  ]);
 });

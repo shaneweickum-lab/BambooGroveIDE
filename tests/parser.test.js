@@ -50,6 +50,43 @@ test("parses boolean/comparison/arithmetic precedence", () => {
   assert.equal(assign.value.left.left.op, "+");
 });
 
+test("parses 'in' as a Compare node distinct from 'for x in y:'", () => {
+  const ast = parse("def f():\n    ok = ch in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "Compare");
+  assert.equal(assign.value.op, "in");
+  assert.equal(assign.value.left.type, "Name");
+  assert.equal(assign.value.left.name, "ch");
+  assert.equal(assign.value.right.type, "Name");
+  assert.equal(assign.value.right.name, "word");
+});
+
+test("parses 'not in' as a single Compare node (not a separate 'not' unary)", () => {
+  const ast = parse("def f():\n    ok = ch not in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "Compare");
+  assert.equal(assign.value.op, "not in");
+  assert.equal(assign.value.left.name, "ch");
+  assert.equal(assign.value.right.name, "word");
+});
+
+test("leading 'not' still binds outside an 'in' comparison ('not X in Y' == 'not (X in Y)')", () => {
+  const ast = parse("def f():\n    ok = not ch in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "UnaryOp");
+  assert.equal(assign.value.op, "not");
+  assert.equal(assign.value.operand.type, "Compare");
+  assert.equal(assign.value.operand.op, "in");
+});
+
+test("a 'for' loop header still parses correctly alongside the new 'in' comparison grammar", () => {
+  const ast = parse("def f():\n    for i in range(8):\n        forward(1)\n");
+  const forNode = ast.body[0].body[0];
+  assert.equal(forNode.type, "For");
+  assert.equal(forNode.varName, "i");
+  assert.equal(forNode.iterable.type, "Call");
+});
+
 test("supports single-line block bodies", () => {
   const ast = parse("def f():\n    if x: forward(1)\n");
   assert.equal(ast.body[0].body[0].cases[0].body[0].type, "ExprStmt");
@@ -183,4 +220,95 @@ test("rejects a malformed expression inside an f-string", () => {
     assert.match(err.message, /Invalid expression inside f-string/);
     return true;
   });
+});
+
+// --- try / except / else / finally / raise (spec 3.2/6.8) ---
+
+test("parses a basic try/except", () => {
+  const ast = parse("def f():\n    try:\n        x = 1\n    except ValueError:\n        x = 2\n");
+  const node = ast.body[0].body[0];
+  assert.equal(node.type, "Try");
+  assert.equal(node.body.length, 1);
+  assert.equal(node.handlers.length, 1);
+  assert.equal(node.handlers[0].exceptionName, "ValueError");
+  assert.equal(node.handlers[0].bindName, null);
+  assert.equal(node.orelse, null);
+  assert.equal(node.finallyBody, null);
+});
+
+test("parses 'except X as name'", () => {
+  const ast = parse("def f():\n    try:\n        x = 1\n    except ValueError as e:\n        print(e)\n");
+  const handler = ast.body[0].body[0].handlers[0];
+  assert.equal(handler.exceptionName, "ValueError");
+  assert.equal(handler.bindName, "e");
+});
+
+test("parses a bare 'except:' as a catch-all handler (exceptionName null)", () => {
+  const ast = parse("def f():\n    try:\n        x = 1\n    except:\n        x = 2\n");
+  const handler = ast.body[0].body[0].handlers[0];
+  assert.equal(handler.exceptionName, null);
+  assert.equal(handler.bindName, null);
+});
+
+test("parses multiple except clauses in order", () => {
+  const ast = parse(
+    "def f():\n    try:\n        x = 1\n    except ValueError:\n        x = 2\n    except TypeError:\n        x = 3\n"
+  );
+  const handlers = ast.body[0].body[0].handlers;
+  assert.equal(handlers.length, 2);
+  assert.equal(handlers[0].exceptionName, "ValueError");
+  assert.equal(handlers[1].exceptionName, "TypeError");
+});
+
+test("parses try/except/else/finally together", () => {
+  const ast = parse(
+    "def f():\n    try:\n        x = 1\n    except ValueError:\n        x = 2\n    else:\n        x = 3\n    finally:\n        x = 4\n"
+  );
+  const node = ast.body[0].body[0];
+  assert.equal(node.orelse.length, 1);
+  assert.equal(node.finallyBody.length, 1);
+});
+
+test("parses try/finally with no except clause at all", () => {
+  const ast = parse("def f():\n    try:\n        x = 1\n    finally:\n        x = 2\n");
+  const node = ast.body[0].body[0];
+  assert.equal(node.handlers.length, 0);
+  assert.equal(node.orelse, null);
+  assert.equal(node.finallyBody.length, 1);
+});
+
+test("rejects a try with no except and no finally", () => {
+  assert.throws(() => parse("def f():\n    try:\n        x = 1\n"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /at least one 'except' clause or a 'finally'/);
+    return true;
+  });
+});
+
+test("rejects an 'else' clause on a try with no except clauses", () => {
+  assert.throws(() => parse("def f():\n    try:\n        x = 1\n    finally:\n        x = 2\n    else:\n        x = 3\n"));
+});
+
+test("parses a bare 'raise' (re-raise) with a null value", () => {
+  const ast = parse("def f():\n    try:\n        x = 1\n    except:\n        raise\n");
+  const raiseNode = ast.body[0].body[0].handlers[0].body[0];
+  assert.equal(raiseNode.type, "Raise");
+  assert.equal(raiseNode.value, null);
+});
+
+test("parses 'raise ValueError(\"msg\")' as a Raise wrapping a Call", () => {
+  const ast = parse('def f():\n    raise ValueError("bad")\n');
+  const raiseNode = ast.body[0].body[0];
+  assert.equal(raiseNode.type, "Raise");
+  assert.equal(raiseNode.value.type, "Call");
+  assert.equal(raiseNode.value.callee, "ValueError");
+  assert.equal(raiseNode.value.args[0].value, "bad");
+});
+
+test("parses a bare 'raise ValueError' (no call) as a Raise wrapping a Name", () => {
+  const ast = parse("def f():\n    raise ValueError\n");
+  const raiseNode = ast.body[0].body[0];
+  assert.equal(raiseNode.type, "Raise");
+  assert.equal(raiseNode.value.type, "Name");
+  assert.equal(raiseNode.value.name, "ValueError");
 });

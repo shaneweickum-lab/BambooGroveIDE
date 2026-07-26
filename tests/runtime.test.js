@@ -68,6 +68,37 @@ test("__setIndex mutates the list in place", () => {
   assert.deepEqual(list, [1, 99, 3]);
 });
 
+// __contains backs Python's 'in'/'not in' (spec 3.2); every case below is
+// cross-checked against real python3 output.
+test("__contains does a substring test for strings, matching Python", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__contains("abc", "", 1), true);
+  assert.equal(rt.__contains("hello", "lo", 1), true);
+  assert.equal(rt.__contains("hello", "z", 1), false);
+});
+
+test("__contains rejects a non-string item against a string container", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__contains("abc", 3, 1), BambooRuntimeError);
+});
+
+test("__contains does an element-membership scan for lists, matching Python", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__contains([1, 2, 3], 2, 1), true);
+  assert.equal(rt.__contains([1, 2, 3], 9, 1), false);
+});
+
+test("__contains compares nested lists by value, not by reference", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__contains([[1, 2], [3, 4]], [1, 2], 1), true);
+  assert.equal(rt.__contains([[1, 2], [3, 4]], [9, 9], 1), false);
+});
+
+test("__contains rejects a container that isn't a string or list", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__contains(42, 1, 1), BambooRuntimeError);
+});
+
 test("__iter accepts lists and rejects non-iterables with a friendly message", () => {
   const rt = new BambooRuntime(fakeCanvas());
   assert.deepEqual(rt.__iter([1, 2], 1), [1, 2]);
@@ -345,12 +376,33 @@ test("data conversion: int/float/str/boolean", () => {
   assert.equal(rt.int("42"), 42);
   assert.equal(rt.int(3.9), 3);
   assert.equal(rt.int(true), 1);
-  assert.equal(rt.int("not a number"), 0);
-  assert.equal(rt.float("3.14"), 3.14);
+  // float() always returns a boxed PyFloat now (spec 3.2/6.8) — see the
+  // dedicated pynum.test.js for its full behavior; .value is the raw number.
+  assert.equal(rt.float("3.14").value, 3.14);
   assert.equal(rt.str(true), "True");
   assert.equal(rt.str([1, "a"]), "[1, 'a']");
   assert.equal(rt.boolean(0), false);
   assert.equal(rt.boolean([1]), true);
+});
+
+// int(str) matches Python's own int() grammar exactly (spec 3.2/6.8's
+// exception taxonomy): whitespace/sign/underscore-separator handling, and
+// ValueError (not a silent 0) on anything unparseable — every case
+// cross-checked against a real python3 interpreter.
+test("int(str) matches Python's int() parsing rules, including ValueError on bad input", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.int("  42  "), 42);
+  assert.equal(rt.int("+42"), 42);
+  assert.equal(rt.int("-7"), -7);
+  assert.equal(rt.int("1_000"), 1000);
+  assert.throws(() => rt.int("not a number"), (err) => {
+    assert.ok(err instanceof BambooRuntimeError);
+    assert.equal(err.pythonType, "ValueError");
+    assert.match(err.message, /invalid literal for int\(\) with base 10: 'not a number'/);
+    return true;
+  });
+  assert.throws(() => rt.int("3.5"), BambooRuntimeError);
+  assert.throws(() => rt.int(""), BambooRuntimeError);
 });
 
 test("len() reports list length and string length; rejects anything else", () => {

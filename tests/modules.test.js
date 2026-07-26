@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assembleProject } from "../src/modules.js";
+import { assembleProject, resolveProject, STDLIB_MODULE_NAMES } from "../src/modules.js";
+import { parse } from "../src/parser.js";
 import { BambooSyntaxError } from "../src/errors.js";
 
 function run(mainSrc, files, rtExtra = {}) {
@@ -9,6 +10,7 @@ function run(mainSrc, files, rtExtra = {}) {
   const rt = {
     __line: 0,
     __truthy: (v) => (Array.isArray(v) ? v.length > 0 : Boolean(v)),
+    __mul: (a, b) => (typeof a === "number" && typeof b === "number" ? a * b : a.repeat(b)),
     forward: (...a) => calls.push(["forward", ...a]),
     circle: (...a) => calls.push(["circle", ...a]),
     ...rtExtra,
@@ -81,4 +83,61 @@ test("no imports at all just compiles the main file alone", () => {
   const { program, calls } = run("def draw():\n    forward(5)\n", {});
   program.draw();
   assert.deepEqual(calls, [["forward", 5]]);
+});
+
+// --- Stdlib mocks (spec 3.2): import <name> resolves to __rt.__stdlib.<name> ---
+
+test("STDLIB_MODULE_NAMES lists the prioritized teaching subset", () => {
+  for (const name of ["math", "random", "time", "os", "sys", "json", "re", "string", "collections", "itertools", "datetime"]) {
+    assert.ok(STDLIB_MODULE_NAMES.has(name), `expected ${name} in STDLIB_MODULE_NAMES`);
+  }
+});
+
+test("'import <stdlib-name>' with no sibling file resolves to a stdlib mock, not an error", () => {
+  const { program, calls } = run(
+    "import math\n\ndef draw():\n    forward(math.double(4))\n",
+    {},
+    { __stdlib: { math: { double: (n) => n * 2 } } }
+  );
+  program.draw();
+  assert.deepEqual(calls, [["forward", 8]]);
+});
+
+test("'from <stdlib-name> import x' binds correctly", () => {
+  const { program, calls } = run(
+    "from math import double\n\ndef draw():\n    forward(double(4))\n",
+    {},
+    { __stdlib: { math: { double: (n) => n * 2 } } }
+  );
+  program.draw();
+  assert.deepEqual(calls, [["forward", 8]]);
+});
+
+test("a project's own sibling file takes precedence over a stdlib mock of the same name", () => {
+  const files = { math: "def double(n):\n    return n * 100\n" };
+  const { program, calls } = run(
+    "import math\n\ndef draw():\n    forward(math.double(4))\n",
+    files,
+    { __stdlib: { math: { double: () => { throw new Error("stdlib mock should not have been used"); } } } }
+  );
+  program.draw();
+  assert.deepEqual(calls, [["forward", 400]]);
+});
+
+test("resolveProject reports stdlib names separately from sibling-file order/resolved", () => {
+  const mainAst = parse("import math\nimport panda\n");
+  const files = { panda: "def draw_panda():\n    return 1\n" };
+  const { order, resolved, stdlibNames } = resolveProject(mainAst, (name) => files[name] ?? null);
+  assert.deepEqual(order, ["panda"]);
+  assert.ok(resolved.has("panda"));
+  assert.ok(!resolved.has("math"));
+  assert.deepEqual([...stdlibNames], ["math"]);
+});
+
+test("an unknown module name (not a sibling file, not a stdlib name) still raises the friendly missing-file error", () => {
+  assert.throws(() => assembleProject("import totally_not_real\n", () => null, "canvas"), (err) => {
+    assert.ok(err instanceof BambooSyntaxError);
+    assert.match(err.message, /totally_not_real\.bs/);
+    return true;
+  });
 });

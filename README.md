@@ -62,6 +62,47 @@ npm test
   or an imported module's own function that happens to share a name
   (e.g. a user's own `.count()`). `"ab" * 3` and `[1, 2] * 3` also match
   Python's repeat semantics instead of JS's silent `NaN`.
+- **`in` / `not in`** (spec 3.2): `"lo" in "hello"` (substring test) and
+  `2 in [1, 2, 3]` (element scan, comparing nested lists by value) match
+  Python exactly, and are parsed as a distinct grammar rule from
+  `for x in y:` so the two never conflict — `examples/in_operator_demo.bs`.
+- **Exceptions** (spec 3.2/6.8): `try`/`except <Type>`/`except <Type> as
+  name`/bare `except:`/`else`/`finally`, and `raise <Expr>`/bare `raise`
+  (re-raise). A fixed taxonomy of built-in exception types
+  (`ValueError`, `TypeError`, `KeyError`, `IndexError`,
+  `ZeroDivisionError`, file-system errors, `JSONDecodeError`,
+  `AttributeError`, catch-all `Exception`/`RuntimeError`) — each a
+  callable that constructs a real, catchable error value without
+  throwing it, exactly like Python's own "exceptions are just instances
+  until raised" model. `int("abc")` and an out-of-range list index now
+  raise `ValueError`/`IndexError` (instead of silently returning `0` or
+  an uncatchable crash) — verified against a real interpreter for every
+  scenario (multiple handlers, `else`/`finally` ordering, an exception
+  raised from `else:` NOT being caught by its own try's handlers,
+  re-raise). Internal guardrail errors (the infinite-loop guard, etc.)
+  stay uncatchable even by the broadest bare `except:`, by design —
+  `examples/exceptions_demo.bs`.
+- **Numeric model** (`src/pynum.js`, spec 3.2/6.8): a genuine int/float
+  distinction matching Python 3 — a decimal-point literal boxes as a
+  `PyFloat`, a plain integer literal stays an ordinary unboxed number
+  (loop counters/indices/`range()`/`len()` stay exactly as fast as
+  before). `/` always returns a float (`4 / 2` → `"2.0"`, not `"2"`);
+  `//` floors toward negative infinity (`-7 // 2` → `-4`); `%` is
+  Python's floored modulo (`-7 % 3` → `2`) — all three raise
+  `ZeroDivisionError` with Python's exact int-vs-float message text.
+  `==`/`!=` compare by value (float-vs-int, or lists element-by-element)
+  instead of by JS reference/strict-type identity. `int("abc")`/
+  `float("abc")` raise `ValueError` with Python's exact message instead
+  of silently returning `0`. A float prints with CPython's own `repr()`
+  — not JS's `Number.prototype.toString()` — matching its exact
+  fixed-vs-scientific-notation threshold (`100.0` keeps its trailing
+  `.0`; `1e+16`, not JS's `10000000000000000`) —
+  `examples/numeric_model_demo.bs`. **Known temporary gap**, closed by
+  this project's very next phase: `+`/`-` still compile as plain inline
+  JS operators, so a float can lose its "float-ness" through `+`/`-` if
+  the result happens to be a whole number (e.g. `3.5 + 1.5` prints `"5"`
+  instead of `"5.0"` for now) — `*`, `/`, `//`, `%`, and comparisons are
+  already fully correct.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
@@ -103,6 +144,18 @@ npm test
   circular imports (naming the full cycle) and missing files, and
   assembles everything into one script — each imported file becomes a
   namespaced object (`panda.draw_panda()`), in dependency order.
+- **Python standard library mocks** (`src/stdlib/`, spec 6.7): the same
+  `import`/`from ... import` syntax also resolves to built-in mocks of a
+  prioritized subset of Python's stdlib (`math`, `random`, `time`, `os`,
+  `sys`, `json`, `re`, `string`, `collections`, `itertools`, `datetime`)
+  when no sibling file of that name exists — a project's own sibling
+  file always wins if one exists (matches real Python's own "a local
+  `math.py` on `sys.path` shadows the stdlib" behavior). Implemented so
+  far: `string` (character-class constants, character-for-character
+  identical to CPython's own values — `examples/stdlib_string_demo.bs`).
+  The rest of the subset is planned but not yet built. See "Python
+  Parity Notes" below for the permanent, documented divergences this
+  effort accepts rather than tries to close.
 - **Reference tab**: a static quick-reference panel covering syntax, the
   full stdlib, and both execution modes — no need to leave the IDE to
   look something up.
@@ -272,3 +325,27 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   upload/hosting, and the current storage layer only persists `.bs`
   source text to `localStorage` — no binary asset support yet. Revisit
   once that's in place.
+
+### Python Parity Notes (spec 6.8)
+
+Working toward "copy-paste a Terminal-tab script into real Python and it
+runs the same," a few gaps are permanent, deliberate exceptions rather
+than bugs to close:
+
+- **No `global` keyword requirement** — BambooScript's top-level
+  variables are read/write from any function without declaring `global`
+  first (see "Top-level shared variables" above); real Python requires
+  it or raises `UnboundLocalError`. Reversing this would break every
+  existing example that relies on it (the whole event-callback idiom).
+- **`random` won't bit-match real Python** — real Python's `random` is
+  seeded Mersenne Twister; BambooScript's `random` mock shares the
+  existing seeded PRNG that already powers Canvas mode's
+  `random()`/`noise()`, a different algorithm. Same seed, different
+  sequence.
+- **Tuples are mutable** — `(a, b)` compiles to a plain JS array, same
+  as `list`.
+- **Stdlib calls are positional-only** — no keyword-argument grammar
+  exists in the parser.
+- **A fixed exception taxonomy, not a full class system** — there's no
+  `class` keyword, so `except MyCustomError:` isn't possible. Every
+  raised error is one of the built-in types listed above.

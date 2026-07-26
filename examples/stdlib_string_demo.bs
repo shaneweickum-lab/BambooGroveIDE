@@ -1,0 +1,24 @@
+# Python's `string` module (spec 3.2) - a handful of character-class
+# constants. No sibling file named string.bs exists in this project, so
+# `import string` resolves to BambooGrove's built-in mock instead, which
+# matches CPython's own string module values character-for-character.
+# Copy this whole file into a real Python interpreter and it prints the same.
+
+import string
+
+print("Lowercase: " + string.ascii_lowercase)
+print("Uppercase: " + string.ascii_uppercase)
+print("Digits: " + string.digits)
+print("Punctuation: " + string.punctuation)
+
+secret = "Hi there, 007!"
+letter_count = 0
+digit_count = 0
+for ch in secret:
+    if string.ascii_letters.find(ch) != -1:
+        letter_count = letter_count + 1
+    if string.digits.find(ch) != -1:
+        digit_count = digit_count + 1
+
+print("Letters: " + str(letter_count))
+print("Digits: " + str(digit_count))

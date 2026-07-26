@@ -1,0 +1,30 @@
+# Python's int/float distinction, //, and % (spec 3.2/6.8). Copy-paste
+# this into a real Python interpreter and it runs the same.
+
+print(str(4 / 2))
+print(str(7 // 2))
+print(str(-7 // 2))
+print(str(-7 % 3))
+print(str(7 % -3))
+print(str(3.5))
+print(str(-3.5))
+
+def safe_divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError as e:
+        print("Error: " + str(e))
+        return -1
+
+print(str(safe_divide(10, 2)))
+print(str(safe_divide(10, 0)))
+
+def safe_floordiv(a, b):
+    try:
+        return a // b
+    except ZeroDivisionError as e:
+        print("Error: " + str(e))
+        return -1
+
+print(str(safe_floordiv(10, 3)))
+print(str(safe_floordiv(10, 0)))

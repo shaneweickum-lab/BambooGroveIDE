@@ -140,6 +140,56 @@ Every `.bs` file uses the BambooScript mark as its icon:
   Terminal-tab script being copy-paste compatible with real Python.
   `"ab" * 3` (and `[1, 2] * 3`) also match Python's repeat semantics
   rather than JS's silent `NaN`.
+- Membership: `X in Y` / `X not in Y` — a substring test against a
+  string (`"lo" in "hello"`), or an element-membership scan against a
+  list (`2 in [1, 2, 3]`, comparing nested lists by value rather than by
+  reference). Distinct from `for x in y:` (Section 3.2's loop form),
+  which the parser recognizes separately. `dict`/`set` membership lands
+  once those types exist.
+- Exceptions: `try` / `except <Type>` / `except <Type> as name` / bare
+  `except:` / `else` / `finally`, and `raise <Expr>` / bare `raise`
+  (re-raise). A fixed exception taxonomy — `ValueError`, `TypeError`,
+  `KeyError`, `IndexError`, `ZeroDivisionError`, `FileNotFoundError`,
+  `FileExistsError`, `NotADirectoryError`, `IsADirectoryError`,
+  `JSONDecodeError`, `AttributeError`, and the catch-all `Exception`/
+  `RuntimeError` — each a built-in callable (`ValueError("bad")`
+  constructs an instance; `raise` is what actually throws it, matching
+  real Python's own model). `int("abc")` and an out-of-range list index
+  now raise `ValueError`/`IndexError` respectively (instead of silently
+  returning `0` or an opaque crash), verified against a real interpreter.
+  Only errors deliberately tagged with a real exception type are ever
+  catchable — internal guardrails (the infinite-loop guard, etc.) stay
+  uncatchable even by the broadest bare `except:`, by design.
+- Numeric model: a genuine int/float distinction, matching Python 3
+  exactly. A decimal-point literal (`3.5`) is a `float`; a plain integer
+  literal stays an ordinary, unboxed number — this keeps loop
+  counters/indices/`range()`/`len()` exactly as fast as before, since
+  only real float values get boxed. `/` (true division) always returns
+  a `float`, even for two ints that divide evenly (`4 / 2` → `2.0`, not
+  `2`, matching Python 3's own behavior). `//` (floor division) floors
+  toward negative infinity (`-7 // 2` → `-4`, not JS's `-3`) and stays
+  `int` if both operands were `int`, promoting to `float` otherwise. `%`
+  is Python's floored modulo, where the result's sign follows the
+  divisor (`-7 % 3` → `2`, not JS's `-1`). `/`, `//`, and `%` all raise
+  `ZeroDivisionError` on a zero divisor, with Python's exact int-vs-float
+  message text (e.g. `"division by zero"` vs. `"float division by
+  zero"`). `==`/`!=` compare by value (a float against a plain int, or
+  two lists element-by-element) rather than by JS reference/strict-type
+  identity. `int("abc")` and `float("abc")` raise `ValueError` on
+  unparseable input (matching Python's exact message text) instead of
+  silently returning `0`. Printing a float matches CPython's own `repr()`
+  exactly, not JS's `Number.prototype.toString()` — `100.0` keeps its
+  trailing `.0`, and the fixed-vs-scientific-notation threshold matches
+  Python's (`1e+16`, not JS's `10000000000000000`).
+  - **Known, temporary gap** (closed by the very next phase in this
+    project's own roadmap, not a permanent parity exception): `+`/`-`
+    between numbers still compile as plain inline JS operators, so a
+    float added to another value can silently lose its "float-ness"
+    (its trailing `.0`) if the arithmetic result happens to be a whole
+    number — e.g. `3.5 + 1.5` prints as `5` rather than Python's `5.0`
+    until `+`/`-` get the same runtime-dispatched treatment as `/`/`//`/`%`
+    above. `*`, `/`, `//`, `%`, comparisons, and `==`/`!=` are already
+    fully correct today.
 - Comments: `#` single line only in v0.1
 
 ### 3.3 Visual/Canvas Standard Library (v0.1 scope)
@@ -469,6 +519,91 @@ from colors import forest_green
   modules (e.g., a "panda" character module) as project starter files
   remains an open question for the platform team, separate from the
   import mechanism itself.
+
+### 6.7 Python Standard Library Mocks
+
+Working toward the platform's long-term goal — a Terminal-tab script
+being 1:1 copy-paste compatible with a real Python interpreter —
+BambooGrove also ships mocked (no filesystem/hardware access) versions
+of a prioritized subset of Python's standard library: `math`, `random`,
+`time`, `os`, `sys`, `json`, `re`, `string`, `collections`, `itertools`,
+`datetime`. These are NOT sibling `.bs` files — they're built into the
+runtime and exposed through the same `import`/`from ... import` syntax
+as Section 6.2, so a script reads identically whether the name resolves
+to a real sibling file or a built-in mock.
+
+**Precedence rule**: a project's own sibling file always wins if one
+exists with the same name (e.g. a project's own `math.bs`) — this
+matches real Python's own well-known "a local `math.py` on `sys.path`
+shadows the stdlib" behavior. The resolver only falls back to a stdlib
+mock once `getModuleSource(name)` has confirmed no such sibling file
+exists.
+
+```
+import string
+print(string.ascii_lowercase)
+
+from string import digits
+print(digits)
+```
+
+Implemented so far: `string` (character-class constants —
+`ascii_lowercase`, `ascii_uppercase`, `ascii_letters`, `digits`,
+`hexdigits`, `octdigits`, `punctuation`, `whitespace`, `printable`,
+all character-for-character identical to CPython's own values). The
+remaining modules in the prioritized subset are planned but not yet
+built — see the project roadmap for phasing.
+
+Two structural constraints apply to every stdlib mock, not just
+`string`: stdlib calls are **positional-only** (BambooScript's parser
+has no keyword-argument grammar at all), and modules needing genuine
+Python-vs-JS behavior differences (RNG algorithm, wall-clock access,
+no-file-system) are called out individually as they're implemented —
+see "Python Parity Notes" below.
+
+### 6.8 Python Parity Notes
+
+BambooScript aims for exact behavioral parity with real Python
+wherever practical (see 3.2's string methods and 6.7's stdlib mocks),
+but a handful of gaps are permanent, deliberate exceptions rather than
+bugs to eventually close:
+
+- **No `global` keyword requirement.** BambooScript's top-level
+  variables can be read *and written* from inside any function without
+  declaring `global name` first — real Python requires the `global`
+  keyword to assign to a module-level name from inside a function, or
+  raises `UnboundLocalError`. This is an intentional, already-shipped
+  "behaves like JavaScript's function scoping" design decision (it's
+  what makes the existing event-callback idiom — e.g. a `clicked` flag
+  toggled from `mousePressed()` and read from `draw()` — work without
+  extra ceremony). Reversing it would break every existing example that
+  relies on it. A script written for BambooScript that never uses
+  `global` will still run correctly in real Python; the divergence only
+  bites the other direction (a real Python script that omits a required
+  `global` and relies on the resulting crash will behave differently
+  here).
+- **`random` module values won't bit-match real Python.** Real Python's
+  `random` module is seeded Mersenne Twister. BambooScript's `random`
+  mock shares the same seeded PRNG that already powers Canvas mode's
+  `random()`/`noise()`, which uses a different algorithm. The same seed
+  will *not* reproduce the same sequence of numbers across BambooScript
+  and real Python. Porting a full Mersenne Twister implementation is a
+  possible separate future task, not part of this parity effort.
+- **Tuples are mutable.** `(a, b)` compiles to a plain JS array, the
+  same representation as `list`, so BambooScript tuples can be mutated
+  after creation — real Python tuples cannot.
+- **Stdlib calls are positional-only.** No module in 6.7 supports
+  keyword arguments (`timedelta(days=1)`-style calls) — BambooScript's
+  parser has no keyword-argument grammar. Use positional order instead.
+- **A fixed exception taxonomy, not a full class system.** `except
+  MyCustomError:` isn't possible — BambooScript has no `class` keyword,
+  so only the built-in exception types listed in 3.2 exist. Every
+  raised error is one of those types (or the `Exception` catch-all);
+  there's no way to define a new exception hierarchy.
+
+Every future stdlib module lands its own additional divergences (if
+any) in this same section as it's implemented, rather than scattering
+them across code comments.
 
 ## 7. Open Questions / Decisions Needed
 

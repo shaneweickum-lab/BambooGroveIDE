@@ -99,7 +99,8 @@ test("noise/noiseDetail/noiseSeed/createVector work in Terminal mode", () => {
 test("int/float/str/boolean work in Terminal mode", () => {
   const rt = new TerminalRuntime();
   assert.equal(rt.int("5"), 5);
-  assert.equal(rt.float("2.5"), 2.5);
+  // float() always returns a boxed PyFloat (spec 3.2/6.8) — see pynum.test.js.
+  assert.equal(rt.float("2.5").value, 2.5);
   assert.equal(rt.str(true), "True");
   assert.equal(rt.boolean(1), true);
 });
