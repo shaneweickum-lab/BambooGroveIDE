@@ -94,4 +94,11 @@ export const EXAMPLES = [
       { name: "rocket.bs", path: "examples/smart_missiles/rocket.bs" },
     ],
   },
+  {
+    id: "stdlib_string_demo",
+    title: "Python's string module",
+    description: "import string - ascii_letters/digits/punctuation, matching CPython's own values.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/stdlib_string_demo.bs" }],
+  },
 ];

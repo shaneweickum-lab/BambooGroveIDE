@@ -103,6 +103,18 @@ npm test
   circular imports (naming the full cycle) and missing files, and
   assembles everything into one script — each imported file becomes a
   namespaced object (`panda.draw_panda()`), in dependency order.
+- **Python standard library mocks** (`src/stdlib/`, spec 6.7): the same
+  `import`/`from ... import` syntax also resolves to built-in mocks of a
+  prioritized subset of Python's stdlib (`math`, `random`, `time`, `os`,
+  `sys`, `json`, `re`, `string`, `collections`, `itertools`, `datetime`)
+  when no sibling file of that name exists — a project's own sibling
+  file always wins if one exists (matches real Python's own "a local
+  `math.py` on `sys.path` shadows the stdlib" behavior). Implemented so
+  far: `string` (character-class constants, character-for-character
+  identical to CPython's own values — `examples/stdlib_string_demo.bs`).
+  The rest of the subset is planned but not yet built. See "Python
+  Parity Notes" below for the permanent, documented divergences this
+  effort accepts rather than tries to close.
 - **Reference tab**: a static quick-reference panel covering syntax, the
   full stdlib, and both execution modes — no need to leave the IDE to
   look something up.
@@ -272,3 +284,24 @@ These mirror the open questions in `docs/SPEC.md` section 6:
   upload/hosting, and the current storage layer only persists `.bs`
   source text to `localStorage` — no binary asset support yet. Revisit
   once that's in place.
+
+### Python Parity Notes (spec 6.8)
+
+Working toward "copy-paste a Terminal-tab script into real Python and it
+runs the same," a few gaps are permanent, deliberate exceptions rather
+than bugs to close:
+
+- **No `global` keyword requirement** — BambooScript's top-level
+  variables are read/write from any function without declaring `global`
+  first (see "Top-level shared variables" above); real Python requires
+  it or raises `UnboundLocalError`. Reversing this would break every
+  existing example that relies on it (the whole event-callback idiom).
+- **`random` won't bit-match real Python** — real Python's `random` is
+  seeded Mersenne Twister; BambooScript's `random` mock shares the
+  existing seeded PRNG that already powers Canvas mode's
+  `random()`/`noise()`, a different algorithm. Same seed, different
+  sequence.
+- **Tuples are mutable** — `(a, b)` compiles to a plain JS array, same
+  as `list`.
+- **Stdlib calls are positional-only** — no keyword-argument grammar
+  exists in the parser.

@@ -7,6 +7,7 @@
 import { BambooRuntimeError } from "./errors.js";
 import { BambooVector } from "./vector.js";
 import { PYTHON_STRING_METHODS_IMPL } from "./pystrings.js";
+import { buildStdlib } from "./stdlib/index.js";
 
 const MAX_ITERATIONS_PER_CALL = 300000;
 const MAX_MS_PER_CALL = 3000;
@@ -42,6 +43,12 @@ export class RuntimeBase {
     this._perlin = null;
     this._perlinOctaves = 4;
     this._perlinAmpFalloff = 0.5;
+
+    // Backs `import math`/`import random`/etc. (spec 3.2) — built once per
+    // runtime instance, same lifecycle as _prngState/_perlin above, so any
+    // stateful stdlib mock (a future virtual filesystem for `os`, etc.)
+    // resets automatically every Run along with everything else.
+    this.__stdlib = buildStdlib(this);
   }
 
   resetGuard() {
