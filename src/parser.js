@@ -352,7 +352,7 @@ class Parser {
 
   parseTerm() {
     let left = this.parseFactor();
-    while (this.at("*") || this.at("/") || this.at("%")) {
+    while (this.at("*") || this.at("/") || this.at("//") || this.at("%")) {
       const tok = this.advance();
       const right = this.parseFactor();
       left = { type: "BinOp", op: tok.type, left, right, line: tok.line };
@@ -414,7 +414,7 @@ class Parser {
     switch (tok.type) {
       case "NUMBER":
         this.advance();
-        return { type: "Num", value: tok.value, line: tok.line };
+        return { type: "Num", value: tok.value, isFloat: tok.isFloat, line: tok.line };
       case "STRING":
         this.advance();
         return { type: "Str", value: tok.value, line: tok.line };

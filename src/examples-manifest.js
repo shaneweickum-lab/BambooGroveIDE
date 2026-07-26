@@ -115,4 +115,11 @@ export const EXAMPLES = [
     mode: "terminal",
     files: [{ name: "main.bs", path: "examples/exceptions_demo.bs" }],
   },
+  {
+    id: "numeric_model_demo",
+    title: "int vs. float, // and %",
+    description: "4/2 -> 2.0, floor division, Python's floored modulo, and ZeroDivisionError.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/numeric_model_demo.bs" }],
+  },
 ];

@@ -82,6 +82,27 @@ npm test
   re-raise). Internal guardrail errors (the infinite-loop guard, etc.)
   stay uncatchable even by the broadest bare `except:`, by design —
   `examples/exceptions_demo.bs`.
+- **Numeric model** (`src/pynum.js`, spec 3.2/6.8): a genuine int/float
+  distinction matching Python 3 — a decimal-point literal boxes as a
+  `PyFloat`, a plain integer literal stays an ordinary unboxed number
+  (loop counters/indices/`range()`/`len()` stay exactly as fast as
+  before). `/` always returns a float (`4 / 2` → `"2.0"`, not `"2"`);
+  `//` floors toward negative infinity (`-7 // 2` → `-4`); `%` is
+  Python's floored modulo (`-7 % 3` → `2`) — all three raise
+  `ZeroDivisionError` with Python's exact int-vs-float message text.
+  `==`/`!=` compare by value (float-vs-int, or lists element-by-element)
+  instead of by JS reference/strict-type identity. `int("abc")`/
+  `float("abc")` raise `ValueError` with Python's exact message instead
+  of silently returning `0`. A float prints with CPython's own `repr()`
+  — not JS's `Number.prototype.toString()` — matching its exact
+  fixed-vs-scientific-notation threshold (`100.0` keeps its trailing
+  `.0`; `1e+16`, not JS's `10000000000000000`) —
+  `examples/numeric_model_demo.bs`. **Known temporary gap**, closed by
+  this project's very next phase: `+`/`-` still compile as plain inline
+  JS operators, so a float can lose its "float-ness" through `+`/`-` if
+  the result happens to be a whole number (e.g. `3.5 + 1.5` prints `"5"`
+  instead of `"5.0"` for now) — `*`, `/`, `//`, `%`, and comparisons are
+  already fully correct.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can

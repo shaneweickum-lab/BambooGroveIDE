@@ -376,7 +376,9 @@ test("data conversion: int/float/str/boolean", () => {
   assert.equal(rt.int("42"), 42);
   assert.equal(rt.int(3.9), 3);
   assert.equal(rt.int(true), 1);
-  assert.equal(rt.float("3.14"), 3.14);
+  // float() always returns a boxed PyFloat now (spec 3.2/6.8) — see the
+  // dedicated pynum.test.js for its full behavior; .value is the raw number.
+  assert.equal(rt.float("3.14").value, 3.14);
   assert.equal(rt.str(true), "True");
   assert.equal(rt.str([1, "a"]), "[1, 'a']");
   assert.equal(rt.boolean(0), false);

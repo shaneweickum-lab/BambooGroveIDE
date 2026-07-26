@@ -73,8 +73,17 @@ const LIFECYCLE_NAMES = [
   "mousePressed", "mouseReleased", "mouseDragged", "mouseMoved", "mouseClicked",
 ];
 
-const BINOP_JS = { "+": "+", "-": "-", "*": "*", "/": "/", "%": "%" };
-const COMPARE_JS = { "==": "===", "!=": "!==", "<": "<", ">": ">", "<=": "<=", ">=": ">=" };
+// "+"/"-" are the only BinOp operators still emitted as plain inline JS —
+// "*" (repeat semantics), "/"/"//"/"%" (int/float-aware, spec 3.2/6.8) all
+// route through a runtime dispatcher instead (see the BinOp case below).
+// "+"/"-" get the same treatment in Phase A7, once list-concat and the
+// float-promotion rule they need both exist.
+const BINOP_JS = { "+": "+", "-": "-" };
+// "=="/"!=" route through __rt.__eq (below) so a PyFloat compares by value
+// against a plain number and lists compare by value instead of reference —
+// only the four ordering comparisons stay inline (already correct via
+// PyFloat's own valueOf()).
+const COMPARE_JS = { "<": "<", ">": ">", "<=": "<=", ">=": ">=" };
 
 function assertValidIdentifier(name, line) {
   if (JS_RESERVED_WORDS.has(name)) {
@@ -407,7 +416,11 @@ class Transpiler {
   genExpr(node) {
     switch (node.type) {
       case "Num":
-        return JSON.stringify(node.value);
+        // A decimal-point literal (spec 3.2/6.8's numeric model) boxes as
+        // a PyFloat so it prints/compares like a real Python float (e.g.
+        // "1.0" keeps its trailing .0); a plain integer literal stays an
+        // ordinary, unboxed JS number — see src/pynum.js.
+        return node.isFloat ? `__rt.__mkfloat(${JSON.stringify(node.value)})` : JSON.stringify(node.value);
       case "Str":
         return JSON.stringify(node.value);
       case "FString":
@@ -431,20 +444,26 @@ class Transpiler {
         return this.genCall(node);
       case "MethodCall":
         return this.genMethodCall(node);
-      case "BinOp":
-        // "*" is special-cased through the runtime: Python's * also means
-        // "repeat" for a string or list times a number ("ab" * 3, [1, 2] *
-        // 3), which plain JS * doesn't do (it would silently coerce to
-        // NaN) — everything else (+, -, /, %) already matches JS closely
-        // enough to stay inline.
-        if (node.op === "*") {
-          return `__rt.__mul(${this.genExpr(node.left)}, ${this.genExpr(node.right)}, ${node.line})`;
+      case "BinOp": {
+        // "*" means "repeat" for a string/list times a number; "/"/"//"/"%"
+        // need int/float-aware results and Python's own floor-division and
+        // floored-modulo semantics (spec 3.2/6.8) — none of that matches
+        // plain JS closely enough to stay inline. "+"/"-" do (for now —
+        // generalized in Phase A7).
+        const DISPATCH = { "*": "__mul", "/": "__truediv", "//": "__floordiv", "%": "__mod" };
+        if (DISPATCH[node.op]) {
+          return `__rt.${DISPATCH[node.op]}(${this.genExpr(node.left)}, ${this.genExpr(node.right)}, ${node.line})`;
         }
         return `(${this.genExpr(node.left)} ${BINOP_JS[node.op]} ${this.genExpr(node.right)})`;
+      }
       case "Compare":
         if (node.op === "in" || node.op === "not in") {
           const containsExpr = `__rt.__contains(${this.genExpr(node.right)}, ${this.genExpr(node.left)}, ${node.line})`;
           return node.op === "not in" ? `(!${containsExpr})` : `(${containsExpr})`;
+        }
+        if (node.op === "==" || node.op === "!=") {
+          const eqExpr = `__rt.__eq(${this.genExpr(node.left)}, ${this.genExpr(node.right)})`;
+          return node.op === "!=" ? `(!${eqExpr})` : `(${eqExpr})`;
         }
         return `(${this.genExpr(node.left)} ${COMPARE_JS[node.op]} ${this.genExpr(node.right)})`;
       case "BoolOp": {
@@ -457,7 +476,13 @@ class Transpiler {
       }
       case "UnaryOp":
         if (node.op === "not") return `__rt.__not(${this.genExpr(node.operand)})`;
-        return `(${node.op}${this.genExpr(node.operand)})`;
+        // Unary '-' on a PyFloat must stay a PyFloat (plain JS '-' would
+        // unbox it via valueOf(), silently losing the trailing ".0" on
+        // print) — routed through the runtime instead of staying inline.
+        // Unary '+' is a genuine no-op in Python (same value, same type),
+        // so it just passes the operand through unchanged.
+        if (node.op === "-") return `__rt.__neg(${this.genExpr(node.operand)}, ${node.line})`;
+        return `(${this.genExpr(node.operand)})`;
       default:
         throw new BambooSyntaxError(`Internal error: unknown expression '${node.type}'.`, node.line);
     }

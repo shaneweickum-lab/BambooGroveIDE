@@ -8,6 +8,7 @@ import { BambooRuntimeError } from "./errors.js";
 import { BambooVector } from "./vector.js";
 import { PYTHON_STRING_METHODS_IMPL } from "./pystrings.js";
 import { buildStdlib } from "./stdlib/index.js";
+import { PyFloat, unboxNum, formatPyFloat } from "./pynum.js";
 
 const MAX_ITERATIONS_PER_CALL = 300000;
 const MAX_MS_PER_CALL = 3000;
@@ -26,20 +27,26 @@ function scaledCosine(i) {
 function describeType(v) {
   if (v === null || v === undefined) return "nothing";
   if (Array.isArray(v)) return "a list";
+  if (v instanceof PyFloat) return "a number";
   if (typeof v === "number") return "a number";
   if (typeof v === "string") return "a string";
   if (typeof v === "boolean") return "a boolean";
   return typeof v;
 }
 
-// Python's `==` on lists compares element-by-element (recursively, for
-// nested lists) rather than by reference — used by `__contains` below so
-// `[1, 2] in [[1, 2], [3, 4]]` matches Python instead of always being False.
+// Python's `==` compares by VALUE, not by reference/type-strictness: a
+// PyFloat unboxes before comparing (so `2.0 == 2` is True, matching
+// Python), and lists compare element-by-element recursively (so
+// `[1, 2] == [1, 2]` is True, and `[1, 2] in [[1, 2], [3, 4]]` — spec
+// 3.2's `in` — works too). Backs both `__eq` (the `==`/`!=` dispatcher,
+// spec 6.8) and `__contains`.
 function pyEquals(a, b) {
-  if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((el, i) => pyEquals(el, b[i]));
+  const av = unboxNum(a);
+  const bv = unboxNum(b);
+  if (Array.isArray(av) && Array.isArray(bv)) {
+    return av.length === bv.length && av.every((el, i) => pyEquals(el, bv[i]));
   }
-  return a === b;
+  return av === bv;
 }
 
 export class RuntimeBase {
@@ -76,7 +83,11 @@ export class RuntimeBase {
 
   __truthy(v) {
     if (Array.isArray(v)) return v.length > 0;
-    return Boolean(v) && !(typeof v === "number" && Number.isNaN(v));
+    // Unbox a PyFloat first — plain JS `Boolean(...)` on any object is
+    // always true regardless of its value, so a boxed 0.0 would otherwise
+    // (wrongly) come out truthy.
+    const raw = unboxNum(v);
+    return Boolean(raw) && !(typeof raw === "number" && Number.isNaN(raw));
   }
 
   __not(v) {
@@ -197,16 +208,100 @@ export class RuntimeBase {
     return obj[name](...args);
   }
 
-  // Python's `*`: number*number is ordinary multiplication, but a string
-  // or list times a number REPEATS it ("ab" * 3 -> "ababab") — plain JS *
-  // would silently coerce to NaN instead.
+  // Python's `*`: number*number is ordinary multiplication (float if
+  // either side is a PyFloat, else plain int), but a string or list times
+  // a plain int REPEATS it ("ab" * 3 -> "ababab") — plain JS *
+  // would silently coerce to NaN instead. Repeat only accepts a plain
+  // int multiplier, matching Python's own "can't multiply sequence by
+  // non-int" rule.
   __mul(a, b, line) {
-    if (typeof a === "number" && typeof b === "number") return a * b;
+    const aNum = a instanceof PyFloat || typeof a === "number";
+    const bNum = b instanceof PyFloat || typeof b === "number";
+    if (aNum && bNum) {
+      const result = unboxNum(a) * unboxNum(b);
+      return (a instanceof PyFloat || b instanceof PyFloat) ? new PyFloat(result) : result;
+    }
     if (typeof a === "string" && typeof b === "number") return a.repeat(Math.max(0, Math.trunc(b)));
     if (typeof a === "number" && typeof b === "string") return b.repeat(Math.max(0, Math.trunc(a)));
     if (Array.isArray(a) && typeof b === "number") return Array(Math.max(0, Math.trunc(b))).fill(a).flat();
     if (typeof a === "number" && Array.isArray(b)) return Array(Math.max(0, Math.trunc(a))).fill(b).flat();
     throw new BambooRuntimeError(`Can't multiply ${describeType(a)} and ${describeType(b)}.`, line);
+  }
+
+  // Constructs a boxed Python float (spec 3.2/6.8) — used for float
+  // literals (`3.5`) and anywhere else a real `float` value needs to
+  // exist as opposed to a plain int.
+  __mkfloat(v) {
+    return new PyFloat(v);
+  }
+
+  // Unary '-': keeps a PyFloat a PyFloat. Plain JS '-' would silently
+  // unbox it via valueOf(), losing the trailing ".0" on print.
+  __neg(v, line) {
+    if (v instanceof PyFloat) return new PyFloat(-v.value);
+    if (typeof v === "number") return -v;
+    throw new BambooRuntimeError(`Can't negate ${describeType(v)}.`, line);
+  }
+
+  // Python's '/' (true division, spec 3.2/6.8): ALWAYS returns a float,
+  // even for two ints that divide evenly (4/2 -> 2.0, not 2) — this is
+  // Python 3's own behavior (distinct from Python 2's `/`).
+  __truediv(a, b, line) {
+    const av = unboxNum(a);
+    const bv = unboxNum(b);
+    if (typeof av !== "number" || typeof bv !== "number") {
+      throw new BambooRuntimeError(`Can't divide ${describeType(a)} and ${describeType(b)}.`, line);
+    }
+    if (bv === 0) {
+      const isFloat = a instanceof PyFloat || b instanceof PyFloat;
+      throw new BambooRuntimeError(isFloat ? "float division by zero" : "division by zero", line, "ZeroDivisionError");
+    }
+    return new PyFloat(av / bv);
+  }
+
+  // Python's '//' (floor division, spec 3.2/6.8): floors toward negative
+  // infinity (-7 // 2 -> -4, not JS's -3), staying a plain int if both
+  // operands were ints and promoting to float if either was a float.
+  __floordiv(a, b, line) {
+    const av = unboxNum(a);
+    const bv = unboxNum(b);
+    if (typeof av !== "number" || typeof bv !== "number") {
+      throw new BambooRuntimeError(`Can't divide ${describeType(a)} and ${describeType(b)}.`, line);
+    }
+    const isFloat = a instanceof PyFloat || b instanceof PyFloat;
+    if (bv === 0) {
+      throw new BambooRuntimeError(
+        isFloat ? "float floor division by zero" : "integer division or modulo by zero",
+        line,
+        "ZeroDivisionError"
+      );
+    }
+    const result = Math.floor(av / bv);
+    return isFloat ? new PyFloat(result) : result;
+  }
+
+  // Python's '%' (floored modulo, spec 3.2/6.8): the result's sign
+  // follows the DIVISOR (-7 % 3 -> 2, not JS's -1), staying a plain int
+  // if both operands were ints.
+  __mod(a, b, line) {
+    const av = unboxNum(a);
+    const bv = unboxNum(b);
+    if (typeof av !== "number" || typeof bv !== "number") {
+      throw new BambooRuntimeError(`Can't compute ${describeType(a)} % ${describeType(b)}.`, line);
+    }
+    const isFloat = a instanceof PyFloat || b instanceof PyFloat;
+    if (bv === 0) {
+      throw new BambooRuntimeError(isFloat ? "float modulo" : "integer modulo by zero", line, "ZeroDivisionError");
+    }
+    const result = ((av % bv) + bv) % bv;
+    return isFloat ? new PyFloat(result) : result;
+  }
+
+  // Python's '==' / '!=' (spec 6.8): compares by VALUE — a PyFloat
+  // against a plain number, or two lists element-by-element — never by
+  // JS reference/strict-type identity. See pyEquals above.
+  __eq(a, b) {
+    return pyEquals(a, b);
   }
 
   // Python's `in` / `not in` (spec 3.2): substring test on a string,
@@ -412,16 +507,40 @@ export class RuntimeBase {
       }
       return parseInt(trimmed.replace(/_/g, ""), 10);
     }
+    // Math.trunc coerces a PyFloat operand via its own valueOf() for
+    // free, so `int(3.9)` (a boxed float) already truncates correctly
+    // here without any PyFloat-specific branch.
     return Math.trunc(v);
   }
 
+  // Always returns a boxed PyFloat (spec 3.2/6.8) — matching Python 3's
+  // own float() constructor, which never returns a plain int. The
+  // string path validates against Python's actual float() grammar
+  // (verified against a real interpreter): optional surrounding
+  // whitespace, an optional sign, digit-separator underscores, "inf"/
+  // "infinity"/"nan" (case-insensitive) — anything else raises
+  // ValueError instead of silently returning 0.
   float(v) {
-    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v === "boolean") return new PyFloat(v ? 1 : 0);
+    if (v instanceof PyFloat) return v;
     if (typeof v === "string") {
-      const n = parseFloat(v);
-      return Number.isNaN(n) ? 0 : n;
+      const trimmed = v.trim();
+      const specialMatch = /^([+-]?)(inf|infinity|nan)$/i.exec(trimmed);
+      if (specialMatch) {
+        const isNeg = specialMatch[1] === "-";
+        const magnitude = specialMatch[2].toLowerCase() === "nan" ? NaN : Infinity;
+        return new PyFloat(isNeg ? -magnitude : magnitude);
+      }
+      if (!/^[+-]?(\d+(_\d+)*(\.(\d+(_\d+)*)?)?|\.\d+(_\d+)*)([eE][+-]?\d+(_\d+)*)?$/.test(trimmed)) {
+        throw new BambooRuntimeError(
+          `could not convert string to float: ${this._stringifyRepr(v)}`,
+          this.__line,
+          "ValueError"
+        );
+      }
+      return new PyFloat(parseFloat(trimmed.replace(/_/g, "")));
     }
-    return Number(v);
+    return new PyFloat(unboxNum(v));
   }
 
   str(v) {
@@ -442,6 +561,9 @@ export class RuntimeBase {
     // A tagged exception value (spec 3.2/6.8, e.g. from `except X as e:`):
     // str(e) is just its message in real Python, not "ValueError: msg".
     if (v instanceof BambooRuntimeError) return v.message;
+    // A boxed float (spec 3.2/6.8's numeric model) — CPython's own float
+    // repr, NOT JS's Number.prototype.toString() (see src/pynum.js).
+    if (v instanceof PyFloat) return formatPyFloat(v.value);
     return String(v);
   }
 
@@ -457,13 +579,14 @@ export class RuntimeBase {
     if (spec == null) return this._stringify(value);
     const fixed = /^\.(\d+)f$/.exec(spec);
     if (fixed) {
-      if (typeof value !== "number") {
+      const num = unboxNum(value);
+      if (typeof num !== "number") {
         throw new BambooRuntimeError(
           `f-string format ':${spec}' needs a number, but got ${describeType(value)}.`,
           line
         );
       }
-      return value.toFixed(Number(fixed[1]));
+      return num.toFixed(Number(fixed[1]));
     }
     throw new BambooRuntimeError(
       `Unsupported f-string format ':${spec}' — only ':.Nf' (fixed decimal places) is supported.`,

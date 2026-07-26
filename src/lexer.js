@@ -37,8 +37,8 @@ export function tokenize(source) {
   let atLineStart = true;
   const len = source.length;
 
-  function push(type, value) {
-    tokens.push({ type, value, line });
+  function push(type, value, extra) {
+    tokens.push(extra ? { type, value, line, ...extra } : { type, value, line });
   }
 
   while (pos < len) {
@@ -194,12 +194,14 @@ export function tokenize(source) {
 
     if (isDigit(ch)) {
       let start = pos;
+      let isFloat = false;
       while (pos < len && isDigit(source[pos])) pos++;
       if (source[pos] === "." && isDigit(source[pos + 1])) {
+        isFloat = true;
         pos++;
         while (pos < len && isDigit(source[pos])) pos++;
       }
-      push("NUMBER", Number(source.slice(start, pos)));
+      push("NUMBER", Number(source.slice(start, pos)), { isFloat });
       continue;
     }
 
@@ -217,7 +219,7 @@ export function tokenize(source) {
 
     // Two-character operators first.
     const two = source.slice(pos, pos + 2);
-    if (two === "==" || two === "!=" || two === "<=" || two === ">=") {
+    if (two === "==" || two === "!=" || two === "<=" || two === ">=" || two === "//") {
       push(two, two);
       pos += 2;
       continue;
