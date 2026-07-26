@@ -130,7 +130,16 @@ Every `.bs` file uses the BambooScript mark as its icon:
   escapes, plus f-strings (`f"hi {name}!"`) — any expression inside
   `{...}` is evaluated and stringified the same way `print()`/`str()`
   format values; `{{`/`}}` escape a literal brace, and `{expr:.Nf}`
-  fixes a number to `N` decimal places
+  fixes a number to `N` decimal places. `s.upper()`, `.lower()`,
+  `.strip()`/`.lstrip()`/`.rstrip()`, `.split()`, `.replace()`,
+  `sep.join(list)`, `.startswith()`/`.endswith()`, `.find()`/`.rfind()`,
+  `.index()`, `.count()`, `.title()`/`.capitalize()`/`.swapcase()`,
+  `.isdigit()`/`.isalpha()`/`.isalnum()`/`.isspace()`/`.isupper()`/
+  `.islower()`, and `.zfill()` all match CPython's own string methods
+  exactly (not just JS's closest equivalent) — working toward a
+  Terminal-tab script being copy-paste compatible with real Python.
+  `"ab" * 3` (and `[1, 2] * 3`) also match Python's repeat semantics
+  rather than JS's silent `NaN`.
 - Comments: `#` single line only in v0.1
 
 ### 3.3 Visual/Canvas Standard Library (v0.1 scope)

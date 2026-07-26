@@ -47,6 +47,13 @@ export const EXAMPLES = [
     files: [{ name: "main.bs", path: "examples/terminal_quiz.bs" }],
   },
   {
+    id: "terminal_string_lab",
+    title: "String lab (Python-compatible)",
+    description: "upper()/split()/title()/join()/... - copy-paste this into real Python and it runs the same.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/terminal_string_lab.bs" }],
+  },
+  {
     id: "terminal_calculator",
     title: "Terminal calculator",
     description: "input() plus the float()/str() data-conversion builtins.",

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { parse } from "../src/parser.js";
 import { transpile, transpileLibrary } from "../src/transpiler.js";
 import { BambooSyntaxError } from "../src/errors.js";
+import { PYTHON_STRING_METHODS_IMPL } from "../src/pystrings.js";
 
 function makeFakeRuntime() {
   const calls = [];
@@ -19,6 +20,15 @@ function makeFakeRuntime() {
     __setIndex(obj, i, v) { obj[i] = v; return v; },
     __append(list, v) { list.push(v); },
     len(v) { return v.length; },
+    __mul(a, b) {
+      if (typeof a === "string" && typeof b === "number") return a.repeat(b);
+      if (typeof a === "number" && typeof b === "string") return b.repeat(a);
+      return a * b;
+    },
+    __strmethod(obj, name, args, line) {
+      if (typeof obj === "string") return PYTHON_STRING_METHODS_IMPL[name](obj, args, line);
+      return obj[name](...args);
+    },
     __fstr(v, spec) {
       if (spec == null) {
         if (v === null || v === undefined) return "None";
@@ -218,6 +228,7 @@ function makeTerminalRuntime() {
     },
     print: (...a) => calls.push(["print", ...a]),
     input: async (p) => `answered:${p}`,
+    __mul: (a, b) => a * b,
   };
   return { rt, calls };
 }
@@ -359,4 +370,49 @@ test("end-to-end: building a list with append() and reading it back with len()",
   );
   program.draw();
   assert.deepEqual(calls, [["forward", 3], ["forward", 4]]);
+});
+
+// --- Python string methods ---
+
+test("a Python string method compiles to __rt.__strmethod(obj, name, [args], line)", () => {
+  const code = transpile(parse('def draw():\n    forward(name.upper())\n'));
+  assert.match(code, /__rt\.__strmethod\(name, "upper", \[\], \d+\)/);
+});
+
+test("a Python string method with arguments passes them as an array literal", () => {
+  const code = transpile(parse('def draw():\n    forward(name.replace("a", "b"))\n'));
+  assert.match(code, /__rt\.__strmethod\(name, "replace", \["a", "b"\], \d+\)/);
+});
+
+test("a Python string method call is awaited in terminal mode", () => {
+  const code = transpile(parse('def draw():\n    name.upper()\n'), { mode: "terminal" });
+  assert.match(code, /\(await __rt\.__strmethod\(name, "upper", \[\], \d+\)\)/);
+});
+
+test("a method name NOT in the Python-string-method set still passes straight through (Vector/module calls unaffected)", () => {
+  const code = transpile(parse("def draw():\n    v.add(1, 2)\n    panda.draw_panda(3, 4)\n"));
+  assert.match(code, /v\.add\(1, 2\)/);
+  assert.match(code, /panda\.draw_panda\(3, 4\)/);
+  assert.doesNotMatch(code, /__strmethod/);
+});
+
+test("end-to-end: .upper()/.split()/.join() work through the real codegen path", () => {
+  const { program, calls } = run(
+    'def draw():\n    forward("hi".upper())\n    forward(",".join(["a", "b"]))\n'
+  );
+  program.draw();
+  assert.deepEqual(calls, [["forward", "HI"], ["forward", "a,b"]]);
+});
+
+// --- Python's * (multiplication + string/list repeat) ---
+
+test("* compiles to __rt.__mul(left, right, line)", () => {
+  const code = transpile(parse("def draw():\n    forward(a * b)\n"));
+  assert.match(code, /__rt\.__mul\(a, b, \d+\)/);
+});
+
+test("end-to-end: string/list repeat via *", () => {
+  const { program, calls } = run('def draw():\n    forward("ab" * 3)\n    forward(4 * 5)\n');
+  program.draw();
+  assert.deepEqual(calls, [["forward", "ababab"], ["forward", 20]]);
 });

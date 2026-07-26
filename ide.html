@@ -262,6 +262,26 @@
                 <dt><code>list.append(value)</code></dt><dd>Add <code>value</code> to the end of <code>list</code>, growing it by one.</dd>
               </dl>
             </section>
+
+            <section>
+              <h3>Strings</h3>
+              <dl>
+                <dt><code>s.upper()</code> / <code>s.lower()</code></dt><dd>Uppercase / lowercase copy.</dd>
+                <dt><code>s.strip()</code></dt><dd>Trim whitespace from both ends (<code>lstrip()</code>/<code>rstrip()</code> for one side); pass a string of characters to strip those instead.</dd>
+                <dt><code>s.split()</code></dt><dd>Split on any run of whitespace. <code>s.split(sep)</code> splits on a literal separator instead.</dd>
+                <dt><code>s.replace(old, new)</code></dt><dd>Replace every occurrence of <code>old</code> with <code>new</code>.</dd>
+                <dt><code>sep.join(list)</code></dt><dd>Join a list of strings together with <code>sep</code> between each one.</dd>
+                <dt><code>s.startswith(x)</code> / <code>s.endswith(x)</code></dt><dd>True/False prefix/suffix check.</dd>
+                <dt><code>s.find(x)</code></dt><dd>Index of the first match, or <code>-1</code> if not found (<code>rfind()</code> searches from the end).</dd>
+                <dt><code>s.index(x)</code></dt><dd>Like <code>find()</code>, but stops the script with an error if <code>x</code> isn't found.</dd>
+                <dt><code>s.count(x)</code></dt><dd>How many non-overlapping times <code>x</code> appears.</dd>
+                <dt><code>s.title()</code> / <code>s.capitalize()</code></dt><dd>Capitalize each word / just the first letter.</dd>
+                <dt><code>s.isdigit()</code> / <code>s.isalpha()</code> / <code>s.isspace()</code></dt><dd>True/False checks on the whole string (also <code>isalnum()</code>, <code>isupper()</code>, <code>islower()</code>).</dd>
+                <dt><code>s.zfill(width)</code></dt><dd>Pad with leading zeros up to <code>width</code>, keeping a <code>+</code>/<code>-</code> sign in front.</dd>
+                <dt><code>"ab" * 3</code></dt><dd>Repeats a string (or a list: <code>[1, 2] * 3</code>).</dd>
+              </dl>
+              <p class="reference-note">These match Python's own string methods exactly — a Terminal-tab script that sticks to <code>print()</code>/<code>input()</code> and these methods can be copied straight into a real Python interpreter and run the same.</p>
+            </section>
           </div>
         </div>
       </section>

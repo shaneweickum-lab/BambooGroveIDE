@@ -118,6 +118,13 @@ test("len()/__append() work in Terminal mode", () => {
   assert.equal(rt.len(xs), 3);
 });
 
+test("Python string methods (__strmethod) and __mul work in Terminal mode", () => {
+  const rt = new TerminalRuntime();
+  assert.equal(rt.__strmethod("  hi  ", "strip", [], 1), "hi");
+  assert.deepEqual(rt.__strmethod("a b c", "split", [], 1), ["a", "b", "c"]);
+  assert.equal(rt.__mul("ab", 3, 1), "ababab");
+});
+
 test("bezier/beginShape/vertex/endShape are still Canvas-only stubs", () => {
   const rt = new TerminalRuntime();
   for (const name of ["bezier", "beginShape", "vertex", "endShape"]) {
