@@ -1,0 +1,20 @@
+# Python's 'in' / 'not in' membership operators (spec 3.2). 'in' works on
+# strings (substring test) and lists (element scan) exactly like real
+# Python. Copy-paste this into a real Python interpreter and it runs the
+# same.
+
+word = "engineering"
+print(word)
+print("e" in word)
+print("z" in word)
+print("z" not in word)
+
+nums = [3, 7, 12, 5]
+print(9 in nums)
+print(12 in nums)
+
+target = 12
+if target in nums:
+    print("found " + str(target))
+if 99 not in nums:
+    print("99 is not here")

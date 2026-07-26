@@ -29,6 +29,10 @@ function makeFakeRuntime() {
       if (typeof obj === "string") return PYTHON_STRING_METHODS_IMPL[name](obj, args, line);
       return obj[name](...args);
     },
+    __contains(container, item) {
+      if (typeof container === "string") return container.includes(item);
+      return container.some((el) => el === item);
+    },
     __fstr(v, spec) {
       if (spec == null) {
         if (v === null || v === undefined) return "None";
@@ -415,4 +419,33 @@ test("end-to-end: string/list repeat via *", () => {
   const { program, calls } = run('def draw():\n    forward("ab" * 3)\n    forward(4 * 5)\n');
   program.draw();
   assert.deepEqual(calls, [["forward", "ababab"], ["forward", 20]]);
+});
+
+// --- Python's 'in' / 'not in' (spec 3.2) ---
+
+test("'in' compiles to __rt.__contains(right, left, line)", () => {
+  const code = transpile(parse("def draw():\n    forward(a in b)\n"));
+  assert.match(code, /__rt\.__contains\(b, a, \d+\)/);
+});
+
+test("'not in' compiles to a negated __rt.__contains(...) call", () => {
+  const code = transpile(parse("def draw():\n    forward(a not in b)\n"));
+  assert.match(code, /!__rt\.__contains\(b, a, \d+\)/);
+});
+
+test("end-to-end: 'in'/'not in' against strings and lists", () => {
+  const { program, calls } = run(
+    'def draw():\n' +
+    '    forward("lo" in "hello")\n' +
+    '    forward("z" not in "hello")\n' +
+    '    forward(2 in [1, 2, 3])\n' +
+    '    forward(9 not in [1, 2, 3])\n'
+  );
+  program.draw();
+  assert.deepEqual(calls, [
+    ["forward", true],
+    ["forward", true],
+    ["forward", true],
+    ["forward", true],
+  ]);
 });

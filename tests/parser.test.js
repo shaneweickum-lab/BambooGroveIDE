@@ -50,6 +50,43 @@ test("parses boolean/comparison/arithmetic precedence", () => {
   assert.equal(assign.value.left.left.op, "+");
 });
 
+test("parses 'in' as a Compare node distinct from 'for x in y:'", () => {
+  const ast = parse("def f():\n    ok = ch in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "Compare");
+  assert.equal(assign.value.op, "in");
+  assert.equal(assign.value.left.type, "Name");
+  assert.equal(assign.value.left.name, "ch");
+  assert.equal(assign.value.right.type, "Name");
+  assert.equal(assign.value.right.name, "word");
+});
+
+test("parses 'not in' as a single Compare node (not a separate 'not' unary)", () => {
+  const ast = parse("def f():\n    ok = ch not in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "Compare");
+  assert.equal(assign.value.op, "not in");
+  assert.equal(assign.value.left.name, "ch");
+  assert.equal(assign.value.right.name, "word");
+});
+
+test("leading 'not' still binds outside an 'in' comparison ('not X in Y' == 'not (X in Y)')", () => {
+  const ast = parse("def f():\n    ok = not ch in word\n");
+  const assign = ast.body[0].body[0];
+  assert.equal(assign.value.type, "UnaryOp");
+  assert.equal(assign.value.op, "not");
+  assert.equal(assign.value.operand.type, "Compare");
+  assert.equal(assign.value.operand.op, "in");
+});
+
+test("a 'for' loop header still parses correctly alongside the new 'in' comparison grammar", () => {
+  const ast = parse("def f():\n    for i in range(8):\n        forward(1)\n");
+  const forNode = ast.body[0].body[0];
+  assert.equal(forNode.type, "For");
+  assert.equal(forNode.varName, "i");
+  assert.equal(forNode.iterable.type, "Call");
+});
+
 test("supports single-line block bodies", () => {
   const ast = parse("def f():\n    if x: forward(1)\n");
   assert.equal(ast.body[0].body[0].cases[0].body[0].type, "ExprStmt");

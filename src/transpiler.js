@@ -339,6 +339,10 @@ class Transpiler {
         }
         return `(${this.genExpr(node.left)} ${BINOP_JS[node.op]} ${this.genExpr(node.right)})`;
       case "Compare":
+        if (node.op === "in" || node.op === "not in") {
+          const containsExpr = `__rt.__contains(${this.genExpr(node.right)}, ${this.genExpr(node.left)}, ${node.line})`;
+          return node.op === "not in" ? `(!${containsExpr})` : `(${containsExpr})`;
+        }
         return `(${this.genExpr(node.left)} ${COMPARE_JS[node.op]} ${this.genExpr(node.right)})`;
       case "BoolOp": {
         if (this.mode === "terminal") {

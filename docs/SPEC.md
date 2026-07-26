@@ -140,6 +140,12 @@ Every `.bs` file uses the BambooScript mark as its icon:
   Terminal-tab script being copy-paste compatible with real Python.
   `"ab" * 3` (and `[1, 2] * 3`) also match Python's repeat semantics
   rather than JS's silent `NaN`.
+- Membership: `X in Y` / `X not in Y` — a substring test against a
+  string (`"lo" in "hello"`), or an element-membership scan against a
+  list (`2 in [1, 2, 3]`, comparing nested lists by value rather than by
+  reference). Distinct from `for x in y:` (Section 3.2's loop form),
+  which the parser recognizes separately. `dict`/`set` membership lands
+  once those types exist.
 - Comments: `#` single line only in v0.1
 
 ### 3.3 Visual/Canvas Standard Library (v0.1 scope)

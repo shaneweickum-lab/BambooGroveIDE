@@ -101,4 +101,11 @@ export const EXAMPLES = [
     mode: "terminal",
     files: [{ name: "main.bs", path: "examples/stdlib_string_demo.bs" }],
   },
+  {
+    id: "in_operator_demo",
+    title: "'in' / 'not in'",
+    description: "Membership tests against strings and lists, matching Python exactly.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/in_operator_demo.bs" }],
+  },
 ];

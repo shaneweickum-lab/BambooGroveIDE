@@ -32,6 +32,16 @@ function describeType(v) {
   return typeof v;
 }
 
+// Python's `==` on lists compares element-by-element (recursively, for
+// nested lists) rather than by reference — used by `__contains` below so
+// `[1, 2] in [[1, 2], [3, 4]]` matches Python instead of always being False.
+function pyEquals(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((el, i) => pyEquals(el, b[i]));
+  }
+  return a === b;
+}
+
 export class RuntimeBase {
   constructor() {
     this.__line = 0;
@@ -183,6 +193,26 @@ export class RuntimeBase {
     if (Array.isArray(a) && typeof b === "number") return Array(Math.max(0, Math.trunc(b))).fill(a).flat();
     if (typeof a === "number" && Array.isArray(b)) return Array(Math.max(0, Math.trunc(a))).fill(b).flat();
     throw new BambooRuntimeError(`Can't multiply ${describeType(a)} and ${describeType(b)}.`, line);
+  }
+
+  // Python's `in` / `not in` (spec 3.2): substring test on a string,
+  // element-membership scan on a list. dict/set branches land in Phase A6
+  // once those types exist. Note the argument order matches how it reads
+  // in generated code: `X in Y` -> __contains(Y, X, line).
+  __contains(container, item, line) {
+    if (typeof container === "string") {
+      if (typeof item !== "string") {
+        throw new BambooRuntimeError(
+          `'in <string>' requires string as left operand, not ${describeType(item)}.`,
+          line
+        );
+      }
+      return container.includes(item);
+    }
+    if (Array.isArray(container)) {
+      return container.some((el) => pyEquals(el, item));
+    }
+    throw new BambooRuntimeError(`Argument of type '${describeType(container)}' is not iterable.`, line);
   }
 
   range(a, b, c) {

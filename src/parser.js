@@ -264,7 +264,16 @@ class Parser {
 
   parseComparison() {
     let left = this.parseArith();
-    if (COMPARE_OPS.has(this.peek().type)) {
+    if (this.at("in")) {
+      const tok = this.advance();
+      const right = this.parseArith();
+      left = { type: "Compare", op: "in", left, right, line: tok.line };
+    } else if (this.at("not") && this.peek(1).type === "in") {
+      const tok = this.advance();
+      this.advance(); // consume the paired 'in'
+      const right = this.parseArith();
+      left = { type: "Compare", op: "not in", left, right, line: tok.line };
+    } else if (COMPARE_OPS.has(this.peek().type)) {
       const tok = this.advance();
       const right = this.parseArith();
       left = { type: "Compare", op: tok.type, left, right, line: tok.line };

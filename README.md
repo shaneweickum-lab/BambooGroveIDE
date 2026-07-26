@@ -62,6 +62,10 @@ npm test
   or an imported module's own function that happens to share a name
   (e.g. a user's own `.count()`). `"ab" * 3` and `[1, 2] * 3` also match
   Python's repeat semantics instead of JS's silent `NaN`.
+- **`in` / `not in`** (spec 3.2): `"lo" in "hello"` (substring test) and
+  `2 in [1, 2, 3]` (element scan, comparing nested lists by value) match
+  Python exactly, and are parsed as a distinct grammar rule from
+  `for x in y:` so the two never conflict — `examples/in_operator_demo.bs`.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
