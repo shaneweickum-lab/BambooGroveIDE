@@ -24,6 +24,10 @@
         <input id="file-upload" type="file" accept=".bs,text/plain" hidden />
         <button id="btn-rename" class="btn" title="Rename this saved sketch">Rename</button>
         <button id="btn-delete" class="btn btn-danger" title="Delete this saved sketch">Delete</button>
+        <div class="examples-dropdown">
+          <button id="btn-examples" class="btn" title="Load a bundled example" aria-haspopup="true" aria-expanded="false">Examples ▾</button>
+          <div id="examples-menu" class="examples-menu" role="menu" hidden></div>
+        </div>
       </div>
 
       <div class="run-controls">
@@ -236,6 +240,14 @@
                 <dt><code>int(v) / float(v)</code></dt><dd>Convert a string or boolean to a number.</dd>
                 <dt><code>str(v)</code></dt><dd>Convert anything to text (numbers, <code>True</code>/<code>False</code>, lists).</dd>
                 <dt><code>boolean(v)</code></dt><dd>Convert to <code>True</code>/<code>False</code> using the same rules as <code>if</code>.</dd>
+              </dl>
+            </section>
+
+            <section>
+              <h3>Lists</h3>
+              <dl>
+                <dt><code>len(list)</code></dt><dd>Number of items in a list (or characters in a string).</dd>
+                <dt><code>list.append(value)</code></dt><dd>Add <code>value</code> to the end of <code>list</code>, growing it by one.</dd>
               </dl>
             </section>
           </div>

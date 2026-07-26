@@ -353,6 +353,22 @@ test("data conversion: int/float/str/boolean", () => {
   assert.equal(rt.boolean([1]), true);
 });
 
+test("len() reports list length and string length; rejects anything else", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.len([1, 2, 3]), 3);
+  assert.equal(rt.len("hello"), 5);
+  assert.equal(rt.len([]), 0);
+  assert.throws(() => rt.len(42), BambooRuntimeError);
+});
+
+test("__append() grows a list in place; rejects a non-list", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  const xs = [1, 2];
+  rt.__append(xs, 3, 1);
+  assert.deepEqual(xs, [1, 2, 3]);
+  assert.throws(() => rt.__append("nope", 1, 1), BambooRuntimeError);
+});
+
 test("__fstr(): no spec falls back to the same stringification as str()/print()", () => {
   const rt = new BambooRuntime(fakeCanvas());
   assert.equal(rt.__fstr("hi", null), "hi");

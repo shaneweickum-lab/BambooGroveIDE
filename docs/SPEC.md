@@ -122,7 +122,10 @@ Every `.bs` file uses the BambooScript mark as its icon:
 - Control flow: `if` / `elif` / `else`, `for ... in range()`, `while`
 - Functions: `def name(params):`, `return`
 - Loops: `for i in range(n):`, `while condition:`
-- Lists: basic list literals and indexing
+- Lists: basic list literals and indexing, plus `len(list)` and
+  `list.append(value)` for reading a list's length and growing it at
+  runtime (the only method BambooScript special-cases, since JS arrays
+  have no native `.append`)
 - Strings: single/double-quoted literals with `\n`/`\t`/`\\`/`\"`/`\'`
   escapes, plus f-strings (`f"hi {name}!"`) — any expression inside
   `{...}` is evaluated and stringified the same way `print()`/`str()`
