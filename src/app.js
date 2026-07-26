@@ -7,6 +7,7 @@ import {
   storage, downloadFile, readUploadedFile, sanitizeName, makeModuleSourceLookup,
 } from "./storage.js";
 import { EXAMPLES } from "./examples-manifest.js";
+import { lint } from "./linter.js";
 
 const DEFAULT_SOURCE = `def setup():
     background(255, 255, 255)
@@ -29,6 +30,9 @@ const projectFilesEl = document.getElementById("project-files");
 const canvasEl = document.getElementById("canvas");
 const errorEl = document.getElementById("error-console");
 const fileUploadEl = document.getElementById("file-upload");
+const lintPanelEl = document.getElementById("lint-panel");
+const lintListEl = document.getElementById("lint-list");
+const lintCountEl = document.getElementById("lint-count");
 
 const terminalOutputEl = document.getElementById("terminal-output");
 const terminalFormEl = document.getElementById("terminal-input-form");
@@ -210,6 +214,67 @@ function renderHighlight(source) {
 function refreshEditorChrome() {
   renderGutter(codeEl.value);
   renderHighlight(codeEl.value);
+  scheduleLint();
+}
+
+// --- Linter (src/linter.js) ---
+// Runs on every edit (debounced) so mistakes and naming inconsistencies
+// show up as the learner types, not only after they press Run.
+
+let lintTimer = null;
+
+function scheduleLint() {
+  clearTimeout(lintTimer);
+  lintTimer = setTimeout(() => renderLint(codeEl.value), 300);
+}
+
+function jumpToLine(line) {
+  const lines = codeEl.value.split("\n");
+  let offset = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; i++) offset += lines[i].length + 1;
+  codeEl.focus();
+  codeEl.setSelectionRange(offset, offset + (lines[line - 1]?.length ?? 0));
+  const lineHeight = parseFloat(getComputedStyle(codeEl).lineHeight) || 20;
+  codeEl.scrollTop = Math.max(0, (line - 1) * lineHeight - codeEl.clientHeight / 2);
+  gutterEl.scrollTop = codeEl.scrollTop;
+  highlightEl.scrollTop = codeEl.scrollTop;
+}
+
+function renderLint(source) {
+  let result;
+  try {
+    result = lint(source);
+  } catch {
+    lintPanelEl.hidden = true; // never let a linter bug block the editor
+    return;
+  }
+
+  const items = result.syntaxError
+    ? [{ line: result.syntaxError.line, severity: "warning", message: result.syntaxError.message, rule: "syntax" }]
+    : result.issues;
+
+  if (items.length === 0) {
+    lintPanelEl.hidden = true;
+    lintListEl.innerHTML = "";
+    return;
+  }
+
+  lintPanelEl.hidden = false;
+  lintCountEl.textContent = String(items.length);
+  lintListEl.innerHTML = "";
+  for (const issue of items) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `lint-item severity-${issue.severity}`;
+    const lineSpan = document.createElement("span");
+    lineSpan.className = "lint-line";
+    lineSpan.textContent = issue.line != null ? `Line ${issue.line}` : "";
+    btn.append(lineSpan, document.createTextNode(issue.message));
+    if (issue.line != null) btn.addEventListener("click", () => jumpToLine(issue.line));
+    li.appendChild(btn);
+    lintListEl.appendChild(li);
+  }
 }
 
 function insertTextAtCursor(text) {

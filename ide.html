@@ -61,6 +61,13 @@
             ></textarea>
           </div>
         </div>
+        <div class="lint-panel" id="lint-panel" hidden>
+          <div class="lint-header">
+            <span>Lint</span>
+            <span id="lint-count" class="lint-count"></span>
+          </div>
+          <ul class="lint-list" id="lint-list"></ul>
+        </div>
       </section>
 
       <section class="output-pane">
@@ -98,6 +105,11 @@
                 <dt><code>return value</code></dt><dd>Return from a function (inside a <code>def</code> only).</dd>
                 <dt><code>f"hi {name}!"</code></dt><dd>f-string: anything inside <code>{'{'}...{'}'}</code> is evaluated and inserted. Use <code>{'{'}{'{'}</code>/<code>{'}'}{'}'}</code> for a literal brace, and <code>{'{'}x:.2f{'}'}</code> to fix a number to 2 decimal places.</dd>
               </dl>
+            </section>
+
+            <section>
+              <h3>Lint panel</h3>
+              <p class="reference-note">A "Lint" panel appears below the editor as you type, pointing out likely mistakes that aren't fatal syntax errors — mixing naming styles (e.g. <code>totalScore</code> alongside <code>total_score</code>), two very-similarly-named variables that might be a typo, a variable that's assigned but never used, comparing directly with <code>True</code>/<code>False</code>, shadowing a built-in name, or a line that's gotten too long. Click an item to jump the cursor to that line. It disappears once there's nothing left to flag.</p>
             </section>
 
             <section>

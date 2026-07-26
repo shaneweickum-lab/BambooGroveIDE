@@ -528,6 +528,12 @@ export const CANVAS_ONLY_BUILTIN_NAMES = Object.keys(RUNTIME_BUILTINS).filter(
   (name) => !NON_CANVAS_BUILTINS.has(name)
 );
 
+// Every callable builtin name and every read-only global name (spec 3.3 +
+// 3.6) — used by src/linter.js to warn when a learner's own variable or
+// function name shadows one of these.
+export const ALL_BUILTIN_NAMES = Object.keys(RUNTIME_BUILTINS);
+export const ALL_GLOBAL_NAMES = Object.keys(GLOBAL_READONLY);
+
 function collectAssignedNames(stmts, into) {
   for (const stmt of stmts) {
     switch (stmt.type) {
