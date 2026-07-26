@@ -146,6 +146,20 @@ Every `.bs` file uses the BambooScript mark as its icon:
   reference). Distinct from `for x in y:` (Section 3.2's loop form),
   which the parser recognizes separately. `dict`/`set` membership lands
   once those types exist.
+- Exceptions: `try` / `except <Type>` / `except <Type> as name` / bare
+  `except:` / `else` / `finally`, and `raise <Expr>` / bare `raise`
+  (re-raise). A fixed exception taxonomy — `ValueError`, `TypeError`,
+  `KeyError`, `IndexError`, `ZeroDivisionError`, `FileNotFoundError`,
+  `FileExistsError`, `NotADirectoryError`, `IsADirectoryError`,
+  `JSONDecodeError`, `AttributeError`, and the catch-all `Exception`/
+  `RuntimeError` — each a built-in callable (`ValueError("bad")`
+  constructs an instance; `raise` is what actually throws it, matching
+  real Python's own model). `int("abc")` and an out-of-range list index
+  now raise `ValueError`/`IndexError` respectively (instead of silently
+  returning `0` or an opaque crash), verified against a real interpreter.
+  Only errors deliberately tagged with a real exception type are ever
+  catchable — internal guardrails (the infinite-loop guard, etc.) stay
+  uncatchable even by the broadest bare `except:`, by design.
 - Comments: `#` single line only in v0.1
 
 ### 3.3 Visual/Canvas Standard Library (v0.1 scope)
@@ -551,6 +565,11 @@ bugs to eventually close:
 - **Stdlib calls are positional-only.** No module in 6.7 supports
   keyword arguments (`timedelta(days=1)`-style calls) — BambooScript's
   parser has no keyword-argument grammar. Use positional order instead.
+- **A fixed exception taxonomy, not a full class system.** `except
+  MyCustomError:` isn't possible — BambooScript has no `class` keyword,
+  so only the built-in exception types listed in 3.2 exist. Every
+  raised error is one of those types (or the `Exception` catch-all);
+  there's no way to define a new exception hierarchy.
 
 Every future stdlib module lands its own additional divergences (if
 any) in this same section as it's implemented, rather than scattering

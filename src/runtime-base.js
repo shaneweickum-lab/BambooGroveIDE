@@ -54,6 +54,12 @@ export class RuntimeBase {
     this._perlinOctaves = 4;
     this._perlinAmpFalloff = 0.5;
 
+    // try/except (spec 3.2): stack of currently-being-handled exceptions,
+    // pushed/popped around a handler's own body — backs bare `raise`
+    // (re-raise) inside an except block. Reset fresh every Run along with
+    // everything else above.
+    this.__excStack = [];
+
     // Backs `import math`/`import random`/etc. (spec 3.2) — built once per
     // runtime instance, same lifecycle as _prngState/_perlin above, so any
     // stateful stdlib mock (a future virtual filesystem for `os`, etc.)
@@ -128,28 +134,36 @@ export class RuntimeBase {
 
   __index(obj, idx, line) {
     if (!Array.isArray(obj) && typeof obj !== "string") {
-      throw new BambooRuntimeError(`Can't index into ${describeType(obj)} — expected a list.`, line);
+      throw new BambooRuntimeError(`Can't index into ${describeType(obj)} — expected a list.`, line, "TypeError");
     }
     if (typeof idx !== "number" || !Number.isInteger(idx)) {
-      throw new BambooRuntimeError("A list index must be a whole number.", line);
+      throw new BambooRuntimeError("A list index must be a whole number.", line, "TypeError");
     }
     const i = idx < 0 ? obj.length + idx : idx;
     if (i < 0 || i >= obj.length) {
-      throw new BambooRuntimeError(`List index ${idx} is out of range (list has ${obj.length} item(s)).`, line);
+      throw new BambooRuntimeError(
+        `List index ${idx} is out of range (list has ${obj.length} item(s)).`,
+        line,
+        "IndexError"
+      );
     }
     return obj[i];
   }
 
   __setIndex(obj, idx, value, line) {
     if (!Array.isArray(obj)) {
-      throw new BambooRuntimeError(`Can't assign into ${describeType(obj)} — expected a list.`, line);
+      throw new BambooRuntimeError(`Can't assign into ${describeType(obj)} — expected a list.`, line, "TypeError");
     }
     if (typeof idx !== "number" || !Number.isInteger(idx)) {
-      throw new BambooRuntimeError("A list index must be a whole number.", line);
+      throw new BambooRuntimeError("A list index must be a whole number.", line, "TypeError");
     }
     const i = idx < 0 ? obj.length + idx : idx;
     if (i < 0 || i >= obj.length) {
-      throw new BambooRuntimeError(`List index ${idx} is out of range (list has ${obj.length} item(s)).`, line);
+      throw new BambooRuntimeError(
+        `List index ${idx} is out of range (list has ${obj.length} item(s)).`,
+        line,
+        "IndexError"
+      );
     }
     obj[i] = value;
     return value;
@@ -213,6 +227,61 @@ export class RuntimeBase {
       return container.some((el) => pyEquals(el, item));
     }
     throw new BambooRuntimeError(`Argument of type '${describeType(container)}' is not iterable.`, line);
+  }
+
+  // Python's exception model (spec 3.2/6.8's fixed taxonomy): `ValueError(
+  // "bad")` CONSTRUCTS a tagged, catchable error value — a real
+  // BambooRuntimeError, so existing `instanceof BambooRuntimeError` checks
+  // keep working uniformly — without throwing it. It's `raise` (below)
+  // that actually throws, exactly like real Python's own "exceptions are
+  // just instances until raised" model. Message formatting matches
+  // CPython's own str(exception) rule: no args -> "", one arg -> that
+  // arg's str(), 2+ args -> a tuple repr, verified against a real
+  // interpreter.
+  __makeException(pythonType, args, line) {
+    let message;
+    if (args.length === 0) message = "";
+    else if (args.length === 1) message = this._stringify(args[0]);
+    else message = `(${args.map((a) => this._stringifyRepr(a)).join(", ")})`;
+    return new BambooRuntimeError(message, line, pythonType);
+  }
+
+  // `raise <expr>`: throws a real, tagged exception value. Raising
+  // anything that isn't one of our tagged exception types is itself a
+  // TypeError, matching CPython's own "exceptions must derive from
+  // BaseException" rule.
+  __raise(value, line) {
+    if (value instanceof BambooRuntimeError) {
+      value.line = line;
+      throw value;
+    }
+    throw new BambooRuntimeError(
+      `exceptions must derive from BaseException (got ${describeType(value)}).`,
+      line,
+      "TypeError"
+    );
+  }
+
+  // Bare `raise` — re-raises whatever exception is currently being
+  // handled (backed by __excStack, pushed/popped around a handler body).
+  __reraise(line) {
+    if (this.__excStack.length === 0) {
+      throw new BambooRuntimeError("No active exception to re-raise.", line, "RuntimeError");
+    }
+    throw this.__excStack[this.__excStack.length - 1];
+  }
+
+  // Whether `err` is catchable by an `except <exceptionName>:` clause
+  // (exceptionName is null for a bare `except:`; "Exception" is the
+  // generic catch-all name, matching anything tagged). Only errors
+  // explicitly tagged with a real pythonType are ever catchable — this is
+  // what keeps internal guardrail errors (the infinite-loop guard, etc. —
+  // pythonType stays its default null) uncatchable even by the broadest
+  // `except:`, by design, not by accident.
+  __excMatches(err, exceptionName) {
+    if (!(err instanceof BambooRuntimeError) || err.pythonType == null) return false;
+    if (exceptionName === null || exceptionName === "Exception") return true;
+    return err.pythonType === exceptionName;
   }
 
   range(a, b, c) {
@@ -327,8 +396,21 @@ export class RuntimeBase {
   int(v) {
     if (typeof v === "boolean") return v ? 1 : 0;
     if (typeof v === "string") {
-      const n = parseInt(v, 10);
-      return Number.isNaN(n) ? 0 : n;
+      // Matches Python's actual int(str) grammar (verified against a real
+      // interpreter): surrounding whitespace and an optional sign are
+      // fine, and single underscores between digits are allowed too
+      // (Python 3.6+'s numeric-literal digit separator, e.g. "1_000") —
+      // anything else (a decimal point, empty string, non-digit text)
+      // raises ValueError instead of silently returning 0.
+      const trimmed = v.trim();
+      if (!/^[+-]?\d+(_\d+)*$/.test(trimmed)) {
+        throw new BambooRuntimeError(
+          `invalid literal for int() with base 10: ${this._stringifyRepr(v)}`,
+          this.__line,
+          "ValueError"
+        );
+      }
+      return parseInt(trimmed.replace(/_/g, ""), 10);
     }
     return Math.trunc(v);
   }
@@ -357,6 +439,9 @@ export class RuntimeBase {
     if (v === null || v === undefined) return "None";
     if (typeof v === "boolean") return v ? "True" : "False";
     if (Array.isArray(v)) return `[${v.map((x) => this._stringifyRepr(x)).join(", ")}]`;
+    // A tagged exception value (spec 3.2/6.8, e.g. from `except X as e:`):
+    // str(e) is just its message in real Python, not "ValueError: msg".
+    if (v instanceof BambooRuntimeError) return v.message;
     return String(v);
   }
 

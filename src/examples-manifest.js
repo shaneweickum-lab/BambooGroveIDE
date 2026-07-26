@@ -108,4 +108,11 @@ export const EXAMPLES = [
     mode: "terminal",
     files: [{ name: "main.bs", path: "examples/in_operator_demo.bs" }],
   },
+  {
+    id: "exceptions_demo",
+    title: "try / except / raise",
+    description: "Catching ValueError/IndexError, else/finally, and raising your own errors.",
+    mode: "terminal",
+    files: [{ name: "main.bs", path: "examples/exceptions_demo.bs" }],
+  },
 ];

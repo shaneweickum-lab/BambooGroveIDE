@@ -117,6 +117,18 @@ const PYTHON_STRING_METHODS = new Set([
   "isupper", "islower", "zfill",
 ]);
 
+// Python's built-in exception types (spec 3.2/6.8's fixed taxonomy). Each
+// is a callable that CONSTRUCTS a tagged, catchable error value without
+// throwing it — `raise` (genRaise below) is what actually throws, exactly
+// like real Python's own model where `ValueError("bad")` is just an
+// instance until something raises it. "Exception" doubles as the generic
+// catch-all name (matches anything tagged, same as a bare `except:`).
+const EXCEPTION_TYPES = new Set([
+  "ValueError", "TypeError", "KeyError", "IndexError", "ZeroDivisionError",
+  "FileNotFoundError", "FileExistsError", "NotADirectoryError", "IsADirectoryError",
+  "JSONDecodeError", "AttributeError", "Exception", "RuntimeError",
+]);
+
 class Transpiler {
   constructor(mode) {
     this.tempCounter = 0;
@@ -231,6 +243,10 @@ class Transpiler {
         return this.genFor(node);
       case "While":
         return this.genWhile(node);
+      case "Try":
+        return this.genTry(node);
+      case "Raise":
+        return this.genRaise(node);
       case "Return":
         return `${mark}\nreturn ${node.value ? this.genExpr(node.value) : ""};`;
       case "Assign":
@@ -301,6 +317,93 @@ class Transpiler {
     ].join("\n");
   }
 
+  // try/except/else/finally (spec 3.2). `__rt.__excStack` (pushed/popped
+  // around the handler-dispatch, not the whole catch) backs bare `raise`
+  // re-raise inside a handler body. The except-else body deliberately
+  // runs OUTSIDE the try/catch (guarded by a flag) rather than just after
+  // the body inside the same try — a real Python `except`/`else` doesn't
+  // catch exceptions raised from its own `else` body, confirmed against a
+  // real interpreter, and inlining it directly after the body would
+  // silently (and wrongly) make this try's own handlers catch those too.
+  genTry(node) {
+    const bodyCode = node.body.map((s) => this.genStmt(s)).join("\n");
+    const finallyCode = node.finallyBody ? node.finallyBody.map((s) => this.genStmt(s)).join("\n") : null;
+    const mark = `__rt.__line = ${node.line};`;
+
+    if (node.handlers.length === 0) {
+      // try/finally only — no except clause at all (real Python allows this).
+      return [mark, `try {`, bodyCode, `} finally {`, finallyCode, `}`].join("\n");
+    }
+
+    const errVar = `__exc${this.tempCounter++}`;
+    const catchBlock = [
+      `catch (${errVar}) {`,
+      `__rt.__excStack.push(${errVar});`,
+      `try {`,
+      this.genExceptDispatch(errVar, node.handlers),
+      `} finally {`,
+      `__rt.__excStack.pop();`,
+      `}`,
+      `}`,
+    ].join("\n");
+
+    if (!node.orelse) {
+      const parts = [mark, `try {`, bodyCode, `}`, catchBlock];
+      if (finallyCode !== null) parts.push(`finally {`, finallyCode, `}`);
+      return parts.join("\n");
+    }
+
+    const okVar = `__ok${this.tempCounter++}`;
+    const orelseCode = node.orelse.map((s) => this.genStmt(s)).join("\n");
+    const inner = [
+      `let ${okVar} = false;`,
+      `try {`,
+      bodyCode,
+      `${okVar} = true;`,
+      `}`,
+      catchBlock,
+      `if (${okVar}) {`,
+      orelseCode,
+      `}`,
+    ].join("\n");
+
+    if (finallyCode === null) return [mark, inner].join("\n");
+    return [mark, `try {`, inner, `} finally {`, finallyCode, `}`].join("\n");
+  }
+
+  genExceptDispatch(errVar, handlers) {
+    const parts = [];
+    handlers.forEach((h, i) => {
+      const kw = i === 0 ? "if" : "} else if";
+      const nameJson = h.exceptionName === null ? "null" : JSON.stringify(h.exceptionName);
+      parts.push(`${kw} (__rt.__excMatches(${errVar}, ${nameJson})) {`);
+      if (h.bindName) {
+        assertValidIdentifier(h.bindName, h.line);
+        parts.push(`const ${h.bindName} = ${errVar};`);
+      }
+      parts.push(h.body.map((s) => this.genStmt(s)).join("\n"));
+    });
+    parts.push(`} else {`, `throw ${errVar};`, `}`);
+    return parts.join("\n");
+  }
+
+  genRaise(node) {
+    const mark = `__rt.__line = ${node.line};`;
+    if (node.value === null) {
+      return `${mark}\nthrow __rt.__reraise(${node.line});`;
+    }
+    // `raise ValueError` (bare, no call) constructs a zero-argument
+    // instance just like `raise ValueError()` — a bare Name referencing
+    // one of the exception types wouldn't otherwise evaluate to anything.
+    let valueExpr;
+    if (node.value.type === "Name" && EXCEPTION_TYPES.has(node.value.name)) {
+      valueExpr = `__rt.__makeException(${JSON.stringify(node.value.name)}, [], ${node.line})`;
+    } else {
+      valueExpr = this.genExpr(node.value);
+    }
+    return `${mark}\nthrow __rt.__raise(${valueExpr}, ${node.line});`;
+  }
+
   genExpr(node) {
     switch (node.type) {
       case "Num":
@@ -363,7 +466,9 @@ class Transpiler {
   genCall(node) {
     const args = node.args.map((a) => this.genExpr(a)).join(", ");
     let callExpr;
-    if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
+    if (EXCEPTION_TYPES.has(node.callee)) {
+      callExpr = `__rt.__makeException(${JSON.stringify(node.callee)}, [${args}], ${node.line})`;
+    } else if (Object.prototype.hasOwnProperty.call(RUNTIME_BUILTINS, node.callee)) {
       callExpr = `__rt.${RUNTIME_BUILTINS[node.callee]}(${args})`;
     } else {
       assertValidIdentifier(node.callee, node.line);
@@ -584,6 +689,16 @@ function collectAssignedNames(stmts, into) {
       case "If":
         for (const c of stmt.cases) collectAssignedNames(c.body, into);
         if (stmt.orelse) collectAssignedNames(stmt.orelse, into);
+        break;
+      case "Try":
+        // A handler's own `except X as e:` binding is intentionally NOT
+        // collected here — it's emitted as a block-scoped `const` inside
+        // its own handler block (see genExceptDispatch), not meant to
+        // escape that block the way a plain assignment does.
+        collectAssignedNames(stmt.body, into);
+        for (const h of stmt.handlers) collectAssignedNames(h.body, into);
+        if (stmt.orelse) collectAssignedNames(stmt.orelse, into);
+        if (stmt.finallyBody) collectAssignedNames(stmt.finallyBody, into);
         break;
       default:
         break;

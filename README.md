@@ -66,6 +66,22 @@ npm test
   `2 in [1, 2, 3]` (element scan, comparing nested lists by value) match
   Python exactly, and are parsed as a distinct grammar rule from
   `for x in y:` so the two never conflict — `examples/in_operator_demo.bs`.
+- **Exceptions** (spec 3.2/6.8): `try`/`except <Type>`/`except <Type> as
+  name`/bare `except:`/`else`/`finally`, and `raise <Expr>`/bare `raise`
+  (re-raise). A fixed taxonomy of built-in exception types
+  (`ValueError`, `TypeError`, `KeyError`, `IndexError`,
+  `ZeroDivisionError`, file-system errors, `JSONDecodeError`,
+  `AttributeError`, catch-all `Exception`/`RuntimeError`) — each a
+  callable that constructs a real, catchable error value without
+  throwing it, exactly like Python's own "exceptions are just instances
+  until raised" model. `int("abc")` and an out-of-range list index now
+  raise `ValueError`/`IndexError` (instead of silently returning `0` or
+  an uncatchable crash) — verified against a real interpreter for every
+  scenario (multiple handlers, `else`/`finally` ordering, an exception
+  raised from `else:` NOT being caught by its own try's handlers,
+  re-raise). Internal guardrail errors (the infinite-loop guard, etc.)
+  stay uncatchable even by the broadest bare `except:`, by design —
+  `examples/exceptions_demo.bs`.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
@@ -309,3 +325,6 @@ than bugs to close:
   as `list`.
 - **Stdlib calls are positional-only** — no keyword-argument grammar
   exists in the parser.
+- **A fixed exception taxonomy, not a full class system** — there's no
+  `class` keyword, so `except MyCustomError:` isn't possible. Every
+  raised error is one of the built-in types listed above.

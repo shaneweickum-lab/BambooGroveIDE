@@ -8,6 +8,7 @@ const KEYWORDS = new Set([
   "def", "return", "if", "elif", "else", "for", "in", "while",
   "and", "or", "not", "True", "False",
   "import", "from", "as",
+  "try", "except", "finally", "raise",
 ]);
 
 const SINGLE_CHAR_OPS = {

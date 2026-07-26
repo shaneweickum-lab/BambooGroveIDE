@@ -73,6 +73,15 @@ function forEachNode(node, visit) {
       forEachNode(node.test, visit);
       forEachNode(node.body, visit);
       break;
+    case "Try":
+      forEachNode(node.body, visit);
+      for (const h of node.handlers) forEachNode(h.body, visit);
+      if (node.orelse) forEachNode(node.orelse, visit);
+      if (node.finallyBody) forEachNode(node.finallyBody, visit);
+      break;
+    case "Raise":
+      if (node.value) forEachNode(node.value, visit);
+      break;
     case "Assign":
       forEachNode(node.target, visit);
       forEachNode(node.value, visit);
@@ -147,6 +156,15 @@ function walkDefs(node, visit) {
     case "While":
       walkDefs(node.body, visit);
       break;
+    case "Try":
+      walkDefs(node.body, visit);
+      for (const h of node.handlers) {
+        if (h.bindName) visit(h.bindName, h.line, "assign");
+        walkDefs(h.body, visit);
+      }
+      if (node.orelse) walkDefs(node.orelse, visit);
+      if (node.finallyBody) walkDefs(node.finallyBody, visit);
+      break;
     case "Assign":
       if (node.target.type === "Name") visit(node.target.name, node.target.line, "assign");
       break;
@@ -200,6 +218,12 @@ function collectTopLevelAssignedNames(stmts) {
         case "If":
           for (const c of stmt.cases) walk(c.body);
           if (stmt.orelse) walk(stmt.orelse);
+          break;
+        case "Try":
+          walk(stmt.body);
+          for (const h of stmt.handlers) walk(h.body);
+          if (stmt.orelse) walk(stmt.orelse);
+          if (stmt.finallyBody) walk(stmt.finallyBody);
           break;
         default:
           break;

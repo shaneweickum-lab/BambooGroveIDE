@@ -376,12 +376,31 @@ test("data conversion: int/float/str/boolean", () => {
   assert.equal(rt.int("42"), 42);
   assert.equal(rt.int(3.9), 3);
   assert.equal(rt.int(true), 1);
-  assert.equal(rt.int("not a number"), 0);
   assert.equal(rt.float("3.14"), 3.14);
   assert.equal(rt.str(true), "True");
   assert.equal(rt.str([1, "a"]), "[1, 'a']");
   assert.equal(rt.boolean(0), false);
   assert.equal(rt.boolean([1]), true);
+});
+
+// int(str) matches Python's own int() grammar exactly (spec 3.2/6.8's
+// exception taxonomy): whitespace/sign/underscore-separator handling, and
+// ValueError (not a silent 0) on anything unparseable — every case
+// cross-checked against a real python3 interpreter.
+test("int(str) matches Python's int() parsing rules, including ValueError on bad input", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.int("  42  "), 42);
+  assert.equal(rt.int("+42"), 42);
+  assert.equal(rt.int("-7"), -7);
+  assert.equal(rt.int("1_000"), 1000);
+  assert.throws(() => rt.int("not a number"), (err) => {
+    assert.ok(err instanceof BambooRuntimeError);
+    assert.equal(err.pythonType, "ValueError");
+    assert.match(err.message, /invalid literal for int\(\) with base 10: 'not a number'/);
+    return true;
+  });
+  assert.throws(() => rt.int("3.5"), BambooRuntimeError);
+  assert.throws(() => rt.int(""), BambooRuntimeError);
 });
 
 test("len() reports list length and string length; rejects anything else", () => {

@@ -1,0 +1,50 @@
+# try/except/else/finally and raise (spec 3.2). Copy-paste this into a
+# real Python interpreter and it runs the same.
+
+def safe_get(items, index):
+    try:
+        return items[index]
+    except IndexError:
+        print("Index " + str(index) + " is out of range")
+        return -1
+
+def parse_number(raw_text):
+    try:
+        return int(raw_text)
+    except ValueError as e:
+        print("Could not parse '" + raw_text + "': " + str(e))
+        return 0
+
+nums = [10, 20, 30]
+print(safe_get(nums, 1))
+print(safe_get(nums, 99))
+
+print(parse_number("42"))
+print(parse_number("not a number"))
+
+def combine(a, b):
+    try:
+        if b == 0:
+            raise ZeroDivisionError("b can't be zero")
+        result = a - b
+    except ZeroDivisionError as e:
+        print("Error: " + str(e))
+    else:
+        print(str(a) + " - " + str(b) + " = " + str(result))
+    finally:
+        print("Done combining " + str(a) + " and " + str(b))
+
+combine(10, 4)
+combine(10, 0)
+
+def risky():
+    try:
+        raise ValueError("deep problem")
+    except ValueError:
+        print("inner: about to re-raise")
+        raise
+
+try:
+    risky()
+except ValueError as e:
+    print("outer caught: " + str(e))
