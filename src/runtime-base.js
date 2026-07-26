@@ -6,6 +6,7 @@
 // or the DOM, so all of it works the same in both Canvas and Terminal mode.
 import { BambooRuntimeError } from "./errors.js";
 import { BambooVector } from "./vector.js";
+import { PYTHON_STRING_METHODS_IMPL } from "./pystrings.js";
 
 const MAX_ITERATIONS_PER_CALL = 300000;
 const MAX_MS_PER_CALL = 3000;
@@ -147,6 +148,34 @@ export class RuntimeBase {
       throw new BambooRuntimeError(`.append() needs a list, but got ${describeType(list)}.`, line);
     }
     list.push(value);
+  }
+
+  // Dispatches a curated set of Python str methods (spec 3.2-adjacent,
+  // working toward Terminal-tab copy-paste compatibility with real
+  // Python) — but only when the receiver is actually a string. Anything
+  // else falls through to its own `.method(...)` unchanged, so this can
+  // never break a Vector method or an imported module's own function that
+  // happens to share one of these names.
+  __strmethod(obj, name, args, line) {
+    if (typeof obj === "string") {
+      return PYTHON_STRING_METHODS_IMPL[name](obj, args, line);
+    }
+    if (obj == null || typeof obj[name] !== "function") {
+      throw new BambooRuntimeError(`Can't call '.${name}(...)' on ${describeType(obj)}.`, line);
+    }
+    return obj[name](...args);
+  }
+
+  // Python's `*`: number*number is ordinary multiplication, but a string
+  // or list times a number REPEATS it ("ab" * 3 -> "ababab") — plain JS *
+  // would silently coerce to NaN instead.
+  __mul(a, b, line) {
+    if (typeof a === "number" && typeof b === "number") return a * b;
+    if (typeof a === "string" && typeof b === "number") return a.repeat(Math.max(0, Math.trunc(b)));
+    if (typeof a === "number" && typeof b === "string") return b.repeat(Math.max(0, Math.trunc(a)));
+    if (Array.isArray(a) && typeof b === "number") return Array(Math.max(0, Math.trunc(b))).fill(a).flat();
+    if (typeof a === "number" && Array.isArray(b)) return Array(Math.max(0, Math.trunc(a))).fill(b).flat();
+    throw new BambooRuntimeError(`Can't multiply ${describeType(a)} and ${describeType(b)}.`, line);
   }
 
   range(a, b, c) {

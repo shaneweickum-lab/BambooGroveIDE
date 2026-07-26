@@ -169,6 +169,11 @@ const BUILTINS = new Set([
   "int", "float", "str", "boolean",
   // Data > Lists
   "len", "append",
+  // Python str methods (working toward Terminal-tab/real-Python parity)
+  "upper", "lower", "strip", "lstrip", "rstrip", "split", "replace", "join",
+  "startswith", "endswith", "find", "rfind", "index", "count", "title",
+  "capitalize", "swapcase", "isdigit", "isalpha", "isalnum", "isspace",
+  "isupper", "islower", "zfill",
   // Vector instance methods (called as v.add(...), etc.)
   "add", "sub", "mult", "div", "mag", "magSq", "normalize", "limit",
   "setMag", "heading", "rotate", "dist", "dot", "cross", "copy", "set",

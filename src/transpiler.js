@@ -106,6 +106,17 @@ function assertValidPropertyName(name, line) {
   }
 }
 
+// Python's str methods (see src/runtime-base.js's __strmethod for the
+// implementations) — matching CPython's own behavior is the whole point,
+// so a Terminal-tab script that only uses these can be copy-pasted into a
+// real Python interpreter and run the same.
+const PYTHON_STRING_METHODS = new Set([
+  "upper", "lower", "strip", "lstrip", "rstrip", "split", "replace", "join",
+  "startswith", "endswith", "find", "rfind", "index", "count", "title",
+  "capitalize", "swapcase", "isdigit", "isalpha", "isalnum", "isspace",
+  "isupper", "islower", "zfill",
+]);
+
 class Transpiler {
   constructor(mode) {
     this.tempCounter = 0;
@@ -318,6 +329,14 @@ class Transpiler {
       case "MethodCall":
         return this.genMethodCall(node);
       case "BinOp":
+        // "*" is special-cased through the runtime: Python's * also means
+        // "repeat" for a string or list times a number ("ab" * 3, [1, 2] *
+        // 3), which plain JS * doesn't do (it would silently coerce to
+        // NaN) — everything else (+, -, /, %) already matches JS closely
+        // enough to stay inline.
+        if (node.op === "*") {
+          return `__rt.__mul(${this.genExpr(node.left)}, ${this.genExpr(node.right)}, ${node.line})`;
+        }
         return `(${this.genExpr(node.left)} ${BINOP_JS[node.op]} ${this.genExpr(node.right)})`;
       case "Compare":
         return `(${this.genExpr(node.left)} ${COMPARE_JS[node.op]} ${this.genExpr(node.right)})`;
@@ -364,6 +383,17 @@ class Transpiler {
     // object already has — Vector methods, module functions, ...).
     if (node.method === "append") {
       const callExpr = `__rt.__append(${obj}, ${args}, ${node.line})`;
+      return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
+    }
+    // Python's str methods (.upper(), .split(), ...): special-cased the
+    // same way .append() is, since JS strings don't have these methods (or
+    // don't have matching semantics for the ones that share a name, like
+    // .replace()). The runtime dispatcher only touches actual strings —
+    // anything else (a Vector, an imported module's own function) falls
+    // straight through to its own `.method(...)`, so this can never break
+    // an existing MethodCall that happens to share one of these names.
+    if (PYTHON_STRING_METHODS.has(node.method)) {
+      const callExpr = `__rt.__strmethod(${obj}, ${JSON.stringify(node.method)}, [${args}], ${node.line})`;
       return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
     }
     const callExpr = `${obj}.${node.method}(${args})`;

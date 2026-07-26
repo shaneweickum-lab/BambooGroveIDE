@@ -1,0 +1,25 @@
+# A Terminal-tab script using nothing but print()/input() and Python's own
+# string methods (spec 3.2). Try it here, then copy the whole file into a
+# real Python interpreter (python3 terminal_string_lab.bs, renamed to .py) -
+# it runs exactly the same, since these methods match CPython's documented
+# behavior byte-for-byte, not just "close enough".
+
+raw_input = input("Type a sentence: ")
+clean = raw_input.strip()
+words = clean.split()
+
+print("Word count: " + str(len(words)))
+print("Uppercase: " + clean.upper())
+print("Title case: " + clean.title())
+
+words.reverse()
+print("Reversed words: " + " ".join(words))
+
+print("Starts with 'The': " + str(clean.startswith("The")))
+
+vowels = "aeiou"
+vowel_count = 0
+for ch in clean.lower():
+    if vowels.find(ch) != -1:
+        vowel_count = vowel_count + 1
+print("Vowel count: " + str(vowel_count))

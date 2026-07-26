@@ -369,6 +369,39 @@ test("__append() grows a list in place; rejects a non-list", () => {
   assert.throws(() => rt.__append("nope", 1, 1), BambooRuntimeError);
 });
 
+test("__strmethod() dispatches Python string methods on actual strings", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__strmethod("hello", "upper", [], 1), "HELLO");
+  assert.deepEqual(rt.__strmethod("a,b,c", "split", [","], 1), ["a", "b", "c"]);
+});
+
+test("__strmethod() falls through to the object's own method when it isn't a string", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  const obj = { upper: (...args) => ["called", ...args] };
+  assert.deepEqual(rt.__strmethod(obj, "upper", [1, 2], 1), ["called", 1, 2]);
+});
+
+test("__strmethod() throws a friendly error for a non-string with no matching method", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__strmethod(5, "upper", [], 1), BambooRuntimeError);
+  assert.throws(() => rt.__strmethod(null, "upper", [], 1), BambooRuntimeError);
+});
+
+test("__mul(): numbers multiply, string/list * number repeats (Python semantics)", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.equal(rt.__mul(4, 5, 1), 20);
+  assert.equal(rt.__mul("ab", 3, 1), "ababab");
+  assert.equal(rt.__mul(3, "ab", 1), "ababab");
+  assert.deepEqual(rt.__mul([1, 2], 2, 1), [1, 2, 1, 2]);
+  assert.equal(rt.__mul("ab", 0, 1), "");
+  assert.equal(rt.__mul("ab", -1, 1), "");
+});
+
+test("__mul() throws a friendly error for incompatible operand types", () => {
+  const rt = new BambooRuntime(fakeCanvas());
+  assert.throws(() => rt.__mul("ab", "cd", 1), BambooRuntimeError);
+});
+
 test("__fstr(): no spec falls back to the same stringification as str()/print()", () => {
   const rt = new BambooRuntime(fakeCanvas());
   assert.equal(rt.__fstr("hi", null), "hi");

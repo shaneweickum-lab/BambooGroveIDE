@@ -45,6 +45,23 @@ npm test
   method BambooScript special-cases (JS arrays have no native
   `.append`), so lists can finally be built up at runtime instead of
   only written out as fixed literals.
+- **Python string methods** (`src/pystrings.js`): working toward a goal
+  of "a Terminal-tab script can be copy-pasted into a real Python
+  interpreter and run the same" — `.upper()`/`.lower()`/`.strip()`/
+  `.lstrip()`/`.rstrip()`/`.split()`/`.replace()`/`.join()`/
+  `.startswith()`/`.endswith()`/`.find()`/`.rfind()`/`.index()`/
+  `.count()`/`.title()`/`.capitalize()`/`.swapcase()`/`.isdigit()`/
+  `.isalpha()`/`.isalnum()`/`.isspace()`/`.isupper()`/`.islower()`/
+  `.zfill()` all match CPython's documented behavior exactly — split()'s
+  no-argument whitespace-run collapsing, count()'s non-overlapping
+  matches, title()'s well-known apostrophe quirk ("they're" ->
+  "They'Re"), zfill()'s sign handling — verified case-by-case against a
+  real Python 3 interpreter, not just "close enough." The transpiler
+  special-cases this set of method names onto a runtime dispatcher that
+  only intercepts actual strings, so it can never break a Vector method
+  or an imported module's own function that happens to share a name
+  (e.g. a user's own `.count()`). `"ab" * 3` and `[1, 2] * 3` also match
+  Python's repeat semantics instead of JS's silent `NaN`.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
@@ -183,6 +200,9 @@ npm test
   population learns to curve around the wall and reliably hit the
   target. Uses the new `len()`/`list.append()` builtins (below) to
   build each rocket's DNA and the next generation's population.
+  `terminal_string_lab.bs` uses only Python string methods and
+  print()/input() — the file can be copy-pasted straight into a real
+  Python interpreter and produces byte-for-byte identical output.
 
 ## Project layout
 
@@ -193,6 +213,7 @@ src/lexer.js                 Tokenizer
 src/parser.js                Recursive-descent parser -> AST
 src/transpiler.js             AST -> JS codegen (Canvas + Terminal modes, library modules)
 src/runtime-base.js           Guard/truthiness/list logic shared by both runtimes
+src/pystrings.js               Python str-method implementations (CPython-exact semantics)
 src/runtime.js                Canvas + turtle + input/timing stdlib (BambooRuntime)
 src/terminal-runtime.js       Terminal tab's runtime: print()/input(), canvas-builtin stubs
 src/modules.js                Import graph resolution + multi-file assembly (spec section 6)
