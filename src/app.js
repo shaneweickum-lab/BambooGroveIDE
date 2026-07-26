@@ -6,6 +6,7 @@ import { Sketch } from "./sandbox.js";
 import {
   storage, downloadFile, readUploadedFile, sanitizeName, makeModuleSourceLookup,
 } from "./storage.js";
+import { EXAMPLES } from "./examples-manifest.js";
 
 const DEFAULT_SOURCE = `def setup():
     background(255, 255, 255)
@@ -42,6 +43,8 @@ const btnRename = document.getElementById("btn-rename");
 const btnDelete = document.getElementById("btn-delete");
 const btnRun = document.getElementById("btn-run");
 const btnStop = document.getElementById("btn-stop");
+const btnExamples = document.getElementById("btn-examples");
+const examplesMenuEl = document.getElementById("examples-menu");
 
 const sketch = new Sketch(canvasEl);
 let currentFileId = null;
@@ -160,6 +163,8 @@ const BUILTINS = new Set([
   "bezier", "beginShape", "vertex", "endShape",
   "noise", "noiseDetail", "noiseSeed", "createVector",
   "int", "float", "str", "boolean",
+  // Data > Lists
+  "len", "append",
   // Vector instance methods (called as v.add(...), etc.)
   "add", "sub", "mult", "div", "mag", "magSq", "normalize", "limit",
   "setMag", "heading", "rotate", "dist", "dot", "cross", "copy", "set",
@@ -503,6 +508,108 @@ fileUploadEl.addEventListener("change", async () => {
   renderProjectFiles();
   setStatus(`Loaded ${file.name} from disk. Save to keep it in your sketch list.`);
 });
+
+// --- Examples browser ---
+// Loads a bundled example (src/examples-manifest.js) straight into the
+// editor, so trying one out doesn't require leaving the IDE for GitHub.
+// Each file's actual source is fetched on demand from examples/*.bs — the
+// manifest only carries titles/descriptions/paths, never a duplicate copy
+// of the source itself.
+
+async function fetchExampleFile(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`couldn't fetch ${path} (${res.status})`);
+  return res.text();
+}
+
+function closeExamplesMenu() {
+  examplesMenuEl.hidden = true;
+  btnExamples.setAttribute("aria-expanded", "false");
+}
+
+function toggleExamplesMenu() {
+  const willOpen = examplesMenuEl.hidden;
+  examplesMenuEl.hidden = !willOpen;
+  btnExamples.setAttribute("aria-expanded", String(willOpen));
+}
+
+function renderExamplesMenu() {
+  examplesMenuEl.innerHTML = "";
+  for (const example of EXAMPLES) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "example-item";
+    item.setAttribute("role", "menuitem");
+    const title = document.createElement("span");
+    title.className = "example-title";
+    title.textContent = example.title;
+    const desc = document.createElement("span");
+    desc.className = "example-desc";
+    desc.textContent = example.description;
+    item.append(title, desc);
+    item.addEventListener("click", () => {
+      closeExamplesMenu();
+      loadExample(example);
+    });
+    examplesMenuEl.appendChild(item);
+  }
+}
+
+async function loadExample(example) {
+  sketch.stop();
+  clearError();
+  setStatus(`Loading "${example.title}"...`);
+  let files;
+  try {
+    files = await Promise.all(
+      example.files.map(async (f) => ({ name: f.name, content: await fetchExampleFile(f.path) }))
+    );
+  } catch (err) {
+    setStatus(`Couldn't load "${example.title}": ${err.message}`);
+    return;
+  }
+
+  const [entryFile, ...siblingFiles] = files;
+
+  if (siblingFiles.length === 0) {
+    // A single file loads unsaved, the same as opening a .bs file from
+    // disk — nothing touches localStorage until the user hits Save.
+    currentFileId = null;
+    currentProjectId = null;
+    filenameEl.value = entryFile.name;
+    codeEl.value = entryFile.content;
+    setStatus(`Loaded example "${example.title}". Save it to keep a copy.`);
+  } else {
+    // Multi-file examples need a real projectId for the project-files chip
+    // row to work at all, so these save immediately as a new sketch.
+    const entry = storage.createFile(entryFile.name, entryFile.content);
+    for (const sibling of siblingFiles) {
+      storage.createProjectFile(entry.projectId, sibling.name, sibling.content);
+    }
+    currentFileId = entry.id;
+    currentProjectId = entry.projectId;
+    filenameEl.value = entry.name;
+    codeEl.value = entryFile.content;
+    setStatus(`Loaded example "${example.title}" as a new saved project.`);
+  }
+
+  refreshEditorChrome();
+  renderFileList();
+  renderProjectFiles();
+  switchTab(example.mode === "terminal" ? "terminal" : "canvas");
+}
+
+btnExamples.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleExamplesMenu();
+});
+document.addEventListener("click", (e) => {
+  if (!examplesMenuEl.hidden && !e.target.closest(".examples-dropdown")) closeExamplesMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !examplesMenuEl.hidden) closeExamplesMenu();
+});
+renderExamplesMenu();
 
 // --- Init ---
 

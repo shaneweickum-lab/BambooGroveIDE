@@ -17,6 +17,8 @@ function makeFakeRuntime() {
     __iter(v) { return v; },
     __index(obj, i) { return obj[i < 0 ? obj.length + i : i]; },
     __setIndex(obj, i, v) { obj[i] = v; return v; },
+    __append(list, v) { list.push(v); },
+    len(v) { return v.length; },
     __fstr(v, spec) {
       if (spec == null) {
         if (v === null || v === undefined) return "None";
@@ -332,4 +334,29 @@ test("f-string format spec formats a number to fixed decimals", () => {
 test("a call inside an f-string expression is still awaited in terminal mode", () => {
   const code = transpile(parse('def draw():\n    x = f"{g()}"\n'), { mode: "terminal" });
   assert.match(code, /__rt\.__fstr\(\(await g\(\)\), null, \d+\)/);
+});
+
+// --- len() / list.append() ---
+
+test("len() maps to __rt.len", () => {
+  const code = transpile(parse("def draw():\n    n = len(xs)\n"));
+  assert.match(code, /__rt\.len\(xs\)/);
+});
+
+test("list.append(x) compiles to __rt.__append(list, x, line)", () => {
+  const code = transpile(parse("def draw():\n    xs.append(1)\n"));
+  assert.match(code, /__rt\.__append\(xs, 1, \d+\)/);
+});
+
+test("list.append(x) is awaited in terminal mode", () => {
+  const code = transpile(parse("def draw():\n    xs.append(1)\n"), { mode: "terminal" });
+  assert.match(code, /\(await __rt\.__append\(xs, 1, \d+\)\)/);
+});
+
+test("end-to-end: building a list with append() and reading it back with len()", () => {
+  const { program, calls } = run(
+    "def draw():\n    xs = []\n    for i in range(3):\n        xs.append(i * 2)\n    forward(len(xs))\n    forward(xs[2])\n"
+  );
+  program.draw();
+  assert.deepEqual(calls, [["forward", 3], ["forward", 4]]);
 });

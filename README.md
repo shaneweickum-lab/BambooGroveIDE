@@ -40,7 +40,11 @@ npm test
   lexer splits the literal into text/expression segments, each `{expr}`
   is re-tokenized and parsed as a full BambooScript expression in its
   own right, so `f"{a + b}"`, nested calls, and even `f"{input()}"` in
-  Terminal mode all work).
+  Terminal mode all work). `len(list)` returns a list's (or string's)
+  length, and `list.append(value)` grows a list in place — the only
+  method BambooScript special-cases (JS arrays have no native
+  `.append`), so lists can finally be built up at runtime instead of
+  only written out as fixed literals.
 - **Transpiler** (`src/transpiler.js`): walks the AST and emits a JS
   function body that calls into the runtime for every visible effect.
   Every statement is tagged with its original source line so errors can
@@ -118,6 +122,15 @@ npm test
   pane — Canvas / Terminal / Reference — plus Run/Stop, the sketch list
   sidebar, and a project-files chip row for switching between a
   project's main file and its sibling modules (with a "+" to add one).
+- **In-app Examples browser** (`src/examples-manifest.js`): an "Examples"
+  dropdown in the toolbar lists every bundled example (title +
+  one-line description) without ever leaving the IDE for GitHub.
+  Picking one fetches its `.bs` file(s) from `examples/` at runtime —
+  the manifest is metadata only, so example source stays single-sourced
+  in `examples/*.bs` — loads it into the editor (auto-saving as a new
+  project for multi-file examples, since the project-files chip row
+  needs a real `projectId`), and switches to the Canvas or Terminal tab
+  to match.
 - **Landing page** (`index.html`, `landing.css`): the site's marketing
   front door — hero, feature grid, a code showcase, and a "Launch the
   IDE" call to action that links to `ide.html`. Static HTML/CSS, no JS
@@ -139,14 +152,21 @@ npm test
   shape), `hsb_rainbow.bs` (`colorMode("hsb")` spinning a rainbow ring),
   `terminal_calculator.bs` (Terminal-tab `input()` + `float()`/`str()`
   conversions), and `smart_missiles/` — a two-file project (`main.bs` +
-  `missile.bs`) with a small fleet of missiles homing in on a moving
-  target using p5.Vector-style "seek" steering (Coding Train / Nature
-  of Code style): each frame, `missile.bs`'s `steer_toward()` computes
-  the desired velocity toward the target, limits how sharply it can
-  turn (`Vector.limit()`), and lets `main.bs` draw the result rotated
-  to face its heading. `main.bs` also prints a live telemetry line with
-  an f-string — `f"target: ({target_x:.1f}, {target_y:.1f})  missiles:
-  {NUM_MISSILES}"` — as a real-world demo of the format-spec syntax.
+  `rocket.bs`) implementing an actual genetic algorithm: Coding Train /
+  Nature of Code's "Smart Rockets". A population of 20 rockets, each
+  with a fixed "DNA" (one random steering force per frame), tries to
+  fly from a launch point to a static target past a wall. Generation 1
+  is chaos — some rockets crash into the wall, most just drift off
+  into space. `rocket.bs`'s `fitness_of()` scores each rocket by how
+  close it ended up to the target (with a big bonus for actually
+  reaching it and a big penalty for hitting the wall); `main.bs`'s
+  `evolve()` then breeds the next generation from the fittest via
+  roulette-wheel selection (`pick_parent()`), single-point crossover,
+  and a small mutation chance, with one elitist carried over unchanged
+  so a winning path is never lost. Within a dozen generations the whole
+  population learns to curve around the wall and reliably hit the
+  target. Uses the new `len()`/`list.append()` builtins (below) to
+  build each rocket's DNA and the next generation's population.
 
 ## Project layout
 
@@ -163,6 +183,7 @@ src/modules.js                Import graph resolution + multi-file assembly (spe
 src/sandbox.js                Compile/run pipeline for both modes, error mapping, rAF loop
 src/storage.js                localStorage-backed file + project management
 src/app.js                    Wires the editor shell UI together (tabs, terminal, project chips)
+src/examples-manifest.js      Metadata for the in-app Examples browser (titles/paths, no source)
 src/errors.js                 Shared BambooSyntaxError / BambooRuntimeError
 serve.js                       Zero-dependency static file server
 docs/SPEC.md                   Full technical spec

@@ -98,6 +98,53 @@ html, body {
 
 .btn-danger:hover { background: var(--danger); border-color: var(--danger); }
 
+/* --- Examples dropdown --- */
+
+.examples-dropdown { position: relative; }
+
+.examples-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  min-width: 300px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--charcoal-light);
+  border: 1px solid var(--forest-green);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.example-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-on-charcoal);
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.example-item:hover, .example-item:focus-visible { background: var(--charcoal-lighter); }
+
+.example-item .example-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.example-item .example-desc {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 /* --- Status bar --- */
 
 .status-bar {

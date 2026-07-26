@@ -1,0 +1,73 @@
+# Genetics + physics helpers for smart_missiles (spec section 6: a
+# two-file module project) - a Coding Train / Nature of Code style "Smart
+# Rockets" genetic algorithm. Every function here is pure: it only touches
+# whatever gets passed in as an argument, never main.bs's own state, since
+# an imported file can't see the importer's top-level variables.
+
+def random_force(max_force):
+    return createVector(random(-max_force, max_force), random(-max_force, max_force))
+
+# A rocket's "DNA" is just a list of random force vectors, one per frame of
+# its lifespan - applying dna[tick] as that frame's steering force is the
+# entire "brain" a rocket has. There's no learning within a single rocket's
+# flight; all the intelligence comes from which DNA survives to breed.
+def make_dna(lifespan, max_force):
+    dna = []
+    for i in range(lifespan):
+        dna.append(random_force(max_force))
+    return dna
+
+def point_in_rect(x, y, rx, ry, rw, rh):
+    inside = False
+    if x > rx and x < rx + rw:
+        if y > ry and y < ry + rh:
+            inside = True
+    return inside
+
+# Fitness rewards ending up close to the target, with a big bonus for
+# actually reaching it and a big penalty for crashing into the wall - the
+# same shape of fitness function Daniel Shiffman uses in the original
+# Smart Rockets sketch.
+def fitness_of(final_x, final_y, target_x, target_y, hit_wall, reached_target):
+    d = dist(final_x, final_y, target_x, target_y)
+    fit = 1 / (d * d + 1)
+    if reached_target:
+        fit = fit * 10
+    if hit_wall:
+        fit = fit * 0.1
+    return fit
+
+# Roulette-wheel selection: a parent with 2x the fitness of another is
+# twice as likely to be picked, without ever ruling out a weaker parent
+# entirely (which is how a lucky low-fitness rocket can still pass on a
+# gene that turns out to matter).
+def pick_parent(fits, total):
+    r = random(0, total)
+    running = 0
+    chosen = 0
+    found = False
+    i = 0
+    while i < len(fits) and not found:
+        running = running + fits[i]
+        if running >= r:
+            chosen = i
+            found = True
+        i = i + 1
+    return chosen
+
+# Single-point crossover: the child's DNA is parent A's up to a random
+# midpoint, then parent B's for the rest.
+def crossover(dna_a, dna_b, lifespan):
+    child = []
+    midpoint = int(random(0, lifespan))
+    for i in range(lifespan):
+        if i < midpoint:
+            child.append(dna_a[i])
+        else:
+            child.append(dna_b[i])
+    return child
+
+def mutate(dna, lifespan, rate, max_force):
+    for i in range(lifespan):
+        if random(0, 1) < rate:
+            dna[i] = random_force(max_force)

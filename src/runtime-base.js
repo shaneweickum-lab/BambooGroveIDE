@@ -137,6 +137,18 @@ export class RuntimeBase {
     return value;
   }
 
+  len(value) {
+    if (Array.isArray(value) || typeof value === "string") return value.length;
+    throw new BambooRuntimeError(`len() needs a list or string, but got ${describeType(value)}.`, this.__line);
+  }
+
+  __append(list, value, line) {
+    if (!Array.isArray(list)) {
+      throw new BambooRuntimeError(`.append() needs a list, but got ${describeType(list)}.`, line);
+    }
+    list.push(value);
+  }
+
   range(a, b, c) {
     let start, stop, step;
     if (b === undefined) { start = 0; stop = a; step = 1; }

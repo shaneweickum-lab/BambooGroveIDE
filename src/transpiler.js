@@ -358,6 +358,14 @@ class Transpiler {
     assertValidPropertyName(node.method, node.line);
     const obj = this.genExpr(node.object);
     const args = node.args.map((a) => this.genExpr(a)).join(", ");
+    // list.append(x) (Python-flavored, spec 3.2): JS arrays have no native
+    // .append, so this is special-cased onto a runtime helper (unlike every
+    // other MethodCall, which just calls straight through to whatever the
+    // object already has — Vector methods, module functions, ...).
+    if (node.method === "append") {
+      const callExpr = `__rt.__append(${obj}, ${args}, ${node.line})`;
+      return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
+    }
     const callExpr = `${obj}.${node.method}(${args})`;
     return this.mode === "terminal" ? `(await ${callExpr})` : callExpr;
   }
@@ -499,6 +507,9 @@ const RUNTIME_BUILTINS = {
   float: "float",
   str: "str",
   boolean: "boolean",
+  // Data > Lists (works in both modes; list.append(x) is handled
+  // separately in genMethodCall since it's a method, not a call)
+  len: "len",
 };
 
 // Builtins that work the same with no canvas at all — everything else in
@@ -510,6 +521,7 @@ const NON_CANVAS_BUILTINS = new Set([
   "random", "randomSeed",
   "noise", "noiseDetail", "noiseSeed", "createVector",
   "int", "float", "str", "boolean",
+  "len",
 ]);
 
 export const CANVAS_ONLY_BUILTIN_NAMES = Object.keys(RUNTIME_BUILTINS).filter(

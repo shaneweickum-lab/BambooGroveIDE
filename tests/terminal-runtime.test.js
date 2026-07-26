@@ -110,6 +110,14 @@ test("f-strings (__fstr) work in Terminal mode", () => {
   assert.equal(rt.__fstr(3.14159, ".2f"), "3.14");
 });
 
+test("len()/__append() work in Terminal mode", () => {
+  const rt = new TerminalRuntime();
+  const xs = [1, 2];
+  rt.__append(xs, 3, 1);
+  assert.deepEqual(xs, [1, 2, 3]);
+  assert.equal(rt.len(xs), 3);
+});
+
 test("bezier/beginShape/vertex/endShape are still Canvas-only stubs", () => {
   const rt = new TerminalRuntime();
   for (const name of ["bezier", "beginShape", "vertex", "endShape"]) {
